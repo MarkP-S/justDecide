@@ -1,116 +1,122 @@
-import React, { useEffect, useRef } from "react";
-import { Animated, Dimensions, View } from "react-native";
+import React from "react";
+import { Animated, Text, View } from "react-native";
 import Svg, { G, Path, Text as SvgText } from "react-native-svg";
 
 type Props = {
-  segments: string[];
-  rotation: number;
-  spinning: boolean;
+    result: string | number | null;
+    segments: (string | number)[];
+    wheelSize: number;
+    radius: number;
+    segmentAngle: number;
+    rotation: Animated.Value;
+    currentRotation: React.MutableRefObject<number>;
+    createPath: (index: number) => string;
+    getSegmentColor: (index: number, total: number) => string;
+    formatLabel: (text: string | number) => string;
 };
 
-export default function WheelCanvas({ segments, rotation, spinning }: Props) {
-  const animated = useRef(new Animated.Value(0)).current;
-  const { width } = Dimensions.get("window");
+export default function WheelCanvas({
+    result,
+    segments,
+    wheelSize,
+    radius,
+    segmentAngle,
+    rotation,
+    currentRotation,
+    createPath,
+    getSegmentColor,
+    formatLabel,
+}: Props) {
+    return (
+        <>
+            {/* RESULT */}
+            <View style={{ height: 60, justifyContent: "center", alignItems: "center" }}>
+                {result !== null && (
+                    <Text style={{ fontSize: 28, color: "white", fontWeight: "bold" }}>
+                        {result}
+                    </Text>
+                )}
+            </View>
 
-  const size = width - 40;
-  const radius = size / 2;
-  const segmentAngle = 360 / segments.length;
+            {/* WHEEL */}
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+                <View style={{ width: wheelSize, height: wheelSize, justifyContent: "center", alignItems: "center", }}>
 
-  useEffect(() => {
-    if (!spinning) return;
+                    {/* POINTER */}
+                    <View
+                        style={{
+                            position: "absolute",
+                            top: -12,
+                            left: wheelSize / 2 - 14,
+                            zIndex: 10,
+                            borderLeftWidth: 14,
+                            borderRightWidth: 14,
+                            borderTopWidth: 24,
+                            borderLeftColor: "transparent",
+                            borderRightColor: "transparent",
+                            borderTopColor: "white",
+                        }}
+                    />
 
-    animated.setValue(0);
+                    <Animated.View
+                        style={{
+                            width: wheelSize,
+                            height: wheelSize,
+                            transform: [
+                                {
+                                    rotate: rotation.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [
+                                            `${currentRotation.current - 360 * 6}deg`,
+                                            `${currentRotation.current}deg`,
+                                        ],
+                                    }),
+                                },
+                            ],
+                        }}
+                    >
+                        <Svg width={wheelSize} height={wheelSize}>
+                            <G>
+                                {segments.map((_, i) => (
+                                    <Path
+                                        key={i}
+                                        d={createPath(i)}
+                                        fill={getSegmentColor(i, segments.length)}
+                                        stroke="#ffffff"
+                                        strokeWidth={0.1}
+                                    />
+                                ))}
 
-    Animated.timing(animated, {
-      toValue: 1,
-      duration: 4000,
-      useNativeDriver: true,
-    }).start();
-  }, [rotation]);
+                                {segments.map((item, i) => {
+                                    const angle = i * segmentAngle + segmentAngle / 2;
+                                    const textRadius = radius * 0.55;
 
-  const getColor = (i: number) => {
-    const hue = 260 + (i / segments.length) * 60;
-    return `hsl(${hue},60%,55%)`;
-  };
+                                    const x =
+                                        radius + textRadius * Math.cos((angle * Math.PI) / 180);
+                                    const y =
+                                        radius + textRadius * Math.sin((angle * Math.PI) / 180);
 
-  const createPath = (i: number) => {
-    const start = (i * segmentAngle * Math.PI) / 180;
-    const end = ((i + 1) * segmentAngle * Math.PI) / 180;
-
-    const x1 = radius + radius * Math.cos(start);
-    const y1 = radius + radius * Math.sin(start);
-    const x2 = radius + radius * Math.cos(end);
-    const y2 = radius + radius * Math.sin(end);
-
-    return `M${radius},${radius} L${x1},${y1} A${radius},${radius} 0 0 1 ${x2},${y2} Z`;
-  };
-
-  return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      {/* POINTER */}
-      <View
-        style={{
-          position: "absolute",
-          top: 40,
-          zIndex: 10,
-          borderLeftWidth: 14,
-          borderRightWidth: 14,
-          borderTopWidth: 24,
-          borderLeftColor: "transparent",
-          borderRightColor: "transparent",
-          borderTopColor: "white",
-        }}
-      />
-
-      <Animated.View
-        style={{
-          width: size,
-          height: size,
-          transform: [
-            {
-              rotate: animated.interpolate({
-                inputRange: [0, 1],
-                outputRange: [
-                  `${rotation - 360 * 6}deg`,
-                  `${rotation}deg`,
-                ],
-              }),
-            },
-          ],
-        }}
-      >
-        <Svg width={size} height={size}>
-          <G>
-            {segments.map((_, i) => (
-              <Path key={i} d={createPath(i)} fill={getColor(i)} />
-            ))}
-
-            {segments.map((text, i) => {
-              const angle = i * segmentAngle + segmentAngle / 2;
-              const r = radius * 0.6;
-
-              const x = radius + r * Math.cos((angle * Math.PI) / 180);
-              const y = radius + r * Math.sin((angle * Math.PI) / 180);
-
-              return (
-                <SvgText
-                  key={i}
-                  x={x}
-                  y={y}
-                  fill="white"
-                  fontSize={Math.max(10, 16 - segments.length * 0.5)}
-                  fontWeight="bold"
-                  textAnchor="middle"
-                  alignmentBaseline="middle"
-                  transform={`rotate(${angle}, ${x}, ${y})`}
-                >
-                  {text}
-                </SvgText>
-              );
-            })}
-          </G>
-        </Svg>
-      </Animated.View>
-    </View>
-  );
+                                    return (
+                                        <SvgText
+                                            key={i}
+                                            x={x}
+                                            y={y}
+                                            fill="white"
+                                            fontSize={Math.max(10, 18 - segments.length)}
+                                            fontWeight="bold"
+                                            textAnchor="middle"
+                                            alignmentBaseline="middle"
+                                            transform={`rotate(${angle}, ${x}, ${y})`}
+                                        >
+                                            {formatLabel(item)}
+                                        </SvgText>
+                                    );
+                                })}
+                            </G>
+                        </Svg>
+                    </Animated.View>
+                </View>
+            </View>
+        </>
+    );
 }
