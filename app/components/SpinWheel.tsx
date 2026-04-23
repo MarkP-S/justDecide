@@ -7,7 +7,10 @@ import {
     KeyboardAvoidingView,
     Platform,
     StatusBar,
-    View,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 
 import Controls from "./Controls";
@@ -25,6 +28,20 @@ export default function SpinWheel() {
         setEditingValue("");
     };
 
+    const [input, setInput] = useState("");
+    const [result, setResult] = useState<string | number | null>(null);
+    const [spinning, setSpinning] = useState(false);
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const [editingValue, setEditingValue] = useState("");
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
+    const [menuVisible, setMenuVisible] = useState(false);
+    const menuAnim = useRef(new Animated.Value(0)).current;
+    const [menuMounted, setMenuMounted] = useState(false);
+
+    const { width } = Dimensions.get("window");
+    const wheelSize = width - 40;
+    const radius = wheelSize / 2;
+
     useEffect(() => {
         const show = Keyboard.addListener("keyboardDidShow", (e) => {
             setKeyboardHeight(e.endCoordinates.height);
@@ -40,6 +57,23 @@ export default function SpinWheel() {
         };
     }, []);
 
+    useEffect(() => {
+        if (menuVisible) {
+            setMenuMounted(true);
+        }
+
+        Animated.timing(menuAnim, {
+            toValue: menuVisible ? 1 : 0,
+            duration: 250,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+        }).start(() => {
+            if (!menuVisible) {
+                setMenuMounted(false);
+            }
+        });
+    }, [menuVisible]);
+
     const rotation = useRef(new Animated.Value(0)).current;
     const currentRotation = useRef(0);
 
@@ -48,16 +82,6 @@ export default function SpinWheel() {
         "More Kitties",
     ]);
 
-    const [input, setInput] = useState("");
-    const [result, setResult] = useState<string | number | null>(null);
-    const [spinning, setSpinning] = useState(false);
-    const [editingIndex, setEditingIndex] = useState<number | null>(null);
-    const [editingValue, setEditingValue] = useState("");
-    const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-    const { width } = Dimensions.get("window");
-    const wheelSize = width - 40;
-    const radius = wheelSize / 2;
     const segmentAngle = 360 / segments.length;
 
     const spin = () => {
@@ -147,6 +171,26 @@ export default function SpinWheel() {
 
             <View style={{ flex: 1 }}>
 
+                <View
+                    style={{
+                        position: "absolute",
+                        top: 20,
+                        right: 20,
+                        zIndex: 20,
+                    }}
+                >
+                    <TouchableOpacity
+                        onPress={() => setMenuVisible(true)}
+                        style={{
+                            padding: 10,
+                            borderRadius: 8,
+                            backgroundColor: "#222",
+                        }}
+                    >
+                        <Text style={{ color: "white", fontSize: 18 }}>☰</Text>
+                    </TouchableOpacity>
+                </View>
+
                 <WheelCanvas
                     result={result}
                     segments={segments}
@@ -176,6 +220,75 @@ export default function SpinWheel() {
                     keyboardHeight={keyboardHeight}
                 />
             </View>
+            {menuMounted && (
+                <>
+                    {/* BACKDROP */}
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={() => setMenuVisible(false)}
+                        style={{
+                            ...StyleSheet.absoluteFillObject,
+                            backgroundColor: "rgba(0,0,0,0.6)",
+                        }}
+                    />
+
+                    {/* MENU PANEL */}
+                    <Animated.View
+                        onStartShouldSetResponder={() => true}
+                        style={{
+                            position: "absolute",
+                            top: 90,
+                            right: 20,
+                            width: 200,
+                            backgroundColor: "#222",
+                            borderRadius: 10,
+                            padding: 10,
+                            transform: [
+                                {
+                                    translateY: menuAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [-50, 0],
+                                    }),
+                                },
+                            ],
+                            opacity: menuAnim,
+                        }}
+                    >
+
+                        {/* CLOSE */}
+                        <TouchableOpacity onPress={() => setMenuVisible(false)}>
+                            <Text style={{ color: "#aaa", marginBottom: 10 }}>Close</Text>
+                        </TouchableOpacity>
+
+                        {/* MENU ITEMS */}
+                        <TouchableOpacity
+                            style={{ paddingVertical: 10 }}
+                            onPress={() => {
+                                setSegments(["Kitties", "More Kitties"]);
+                                setMenuVisible(false);
+                            }}
+                        >
+                            <Text style={{ color: "white" }}>Reset Wheel</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={{ paddingVertical: 10 }}
+                            onPress={() => {
+                                setSegments([...segments].sort(() => Math.random() - 0.5));
+                                setMenuVisible(false);
+                            }}
+                        >
+                            <Text style={{ color: "white" }}>Shuffle Options</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={{ paddingVertical: 10 }}>
+                            <Text style={{ color: "white" }}>Themes (coming soon)</Text>
+                        </TouchableOpacity>
+
+                    </Animated.View>
+
+                </>
+            )}
         </KeyboardAvoidingView>
     );
 }
