@@ -10,7 +10,7 @@ type Props = {
     segmentAngle: number;
     rotation: Animated.Value;
     currentRotation: React.MutableRefObject<number>;
-    createPath: (index: number) => string;
+    createPath: (index: number, radius: number, totalSegments: number) => string;
     getSegmentColor: (index: number, total: number) => string;
     formatLabel: (text: string | number) => string;
 };
@@ -30,7 +30,7 @@ export default function WheelCanvas({
     return (
         <>
             {/* RESULT */}
-            <View style={{ height: 60, justifyContent: "center", alignItems: "center" }}>
+            <View style={{ height: 120, top: 30, justifyContent: "center", alignItems: "center" }}>
                 {result !== null && (
                     <Text style={{ fontSize: 28, color: "white", fontWeight: "bold" }}>
                         {result}
@@ -46,7 +46,7 @@ export default function WheelCanvas({
                     <View
                         style={{
                             position: "absolute",
-                            top: -12,
+                            top: -6,
                             left: wheelSize / 2 - 14,
                             zIndex: 10,
                             borderLeftWidth: 14,
@@ -80,9 +80,9 @@ export default function WheelCanvas({
                                 {segments.map((_, i) => (
                                     <Path
                                         key={i}
-                                        d={createPath(i)}
+                                        d={createPath(i, radius, segments.length)}
                                         fill={getSegmentColor(i, segments.length)}
-                                        stroke="#ffffff"
+                                        stroke="#fff"
                                         strokeWidth={0.1}
                                     />
                                 ))}
