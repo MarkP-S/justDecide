@@ -15,6 +15,7 @@ type Props = {
     onClose: () => void;
     onReset: () => void;
     onShuffle: () => void;
+    onOpenPresets: () => void;
 };
 
 export default function WheelMenu({
@@ -24,6 +25,7 @@ export default function WheelMenu({
     onClose,
     onReset,
     onShuffle,
+    onOpenPresets,
 }: Props) {
     if (!mounted) return null;
 
@@ -91,9 +93,17 @@ export default function WheelMenu({
 
                 <TouchableOpacity style={{ paddingVertical: 10 }}>
                     <Text style={{ color: "white" }}>
-                        Themes (coming soon)
+                        Themes (coming very soon)
                     </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={onOpenPresets}
+                    style={{ paddingVertical: 12 }}
+                >
+                    <Text style={{ color: "white" }}>Presets</Text>
+                </TouchableOpacity>
+
             </Animated.View>
         </View>
     );

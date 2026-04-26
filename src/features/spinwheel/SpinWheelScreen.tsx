@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
     Dimensions,
     KeyboardAvoidingView,
@@ -12,9 +12,11 @@ import {
 import useSpinWheel from "./hooks/useSpinWheel";
 
 // feature components
+import { useLocalSearchParams, useRouter } from "expo-router";
 import Controls from "./components/Controls";
 import WheelCanvas from "./components/WheelCanvas";
 import WheelMenu from "./components/WheelMenu";
+
 
 import {
     createPath,
@@ -23,6 +25,7 @@ import {
 } from "./utils/wheelMath";
 
 export default function SpinWheelScreen() {
+    const router = useRouter();
     const {
         rotation,
         currentRotation,
@@ -33,6 +36,7 @@ export default function SpinWheelScreen() {
         setInput,
         addSegment,
         removeSegment,
+        setSegments,
         editingIndex,
         setEditingIndex,
         editingValue,
@@ -49,10 +53,22 @@ export default function SpinWheelScreen() {
         menuAnim,
     } = useSpinWheel();
 
+    const { segments: presetSegments } = useLocalSearchParams();
+
+    useEffect(() => {
+        if (!presetSegments) return;
+
+        try {
+            const parsed = JSON.parse(presetSegments as string);
+            setSegments(parsed);
+        } catch {
+            console.warn("Invalid preset data");
+        }
+    }, [presetSegments]);
+
     const { width } = Dimensions.get("window");
     const wheelSize = width - 40;
     const radius = wheelSize / 2;
-
 
     return (
         <KeyboardAvoidingView style={{ flex: 1, backgroundColor: "#121212" }}
@@ -118,6 +134,7 @@ export default function SpinWheelScreen() {
                     shuffleSegments();
                     setMenuVisible(false);
                 }}
+                onOpenPresets={() => router.push("/presets")}
             />
         </KeyboardAvoidingView>
     );

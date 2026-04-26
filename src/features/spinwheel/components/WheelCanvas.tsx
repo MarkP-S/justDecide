@@ -81,7 +81,7 @@ export default function WheelCanvas({
                                     <Path
                                         key={i}
                                         d={createPath(i, radius, segments.length)}
-                                        fill={getSegmentColor(i, segments.length)}
+                                        fill={getSegmentColor(i, Math.max(segments.length, 1))}
                                         stroke="#fff"
                                         strokeWidth={0.1}
                                     />
@@ -89,12 +89,14 @@ export default function WheelCanvas({
 
                                 {segments.map((item, i) => {
                                     const angle = i * segmentAngle + segmentAngle / 2;
-                                    const textRadius = radius * 0.55;
+                                    const textRadius = segments.length === 1 ? 0 : radius * 0.55;
 
                                     const x =
                                         radius + textRadius * Math.cos((angle * Math.PI) / 180);
                                     const y =
                                         radius + textRadius * Math.sin((angle * Math.PI) / 180);
+
+                                    const correctedAngle = angle > 90 && angle < 270 ? angle + 180 : angle;
 
                                     return (
                                         <SvgText
@@ -106,7 +108,7 @@ export default function WheelCanvas({
                                             fontWeight="bold"
                                             textAnchor="middle"
                                             alignmentBaseline="middle"
-                                            transform={`rotate(${angle}, ${x}, ${y})`}
+                                            transform={`rotate(${correctedAngle}, ${x}, ${y})`}
                                         >
                                             {formatLabel(item)}
                                         </SvgText>

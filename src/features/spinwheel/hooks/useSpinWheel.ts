@@ -59,7 +59,7 @@ function reducer(state: State, action: Action): State {
             };
 
         case "REMOVE_SEGMENT":
-            if (state.segments.length <= 2) return state;
+            if (state.segments.length <= 1) return state;
             return {
                 ...state,
                 segments: state.segments.filter((_, i) => i !== action.payload),
@@ -122,7 +122,7 @@ function reducer(state: State, action: Action): State {
    INITIAL STATE
 --------------------------*/
 const initialState: State = {
-    segments: ["Kitties", "More Kitties"],
+    segments: ["Add options"],
     input: "",
     result: null,
     spinning: false,
@@ -193,6 +193,7 @@ export default function useSpinWheel() {
        SPIN LOGIC (USES PURE UTILS)
     --------------------------*/
     const spin = () => {
+
         if (state.spinning) return;
 
         dispatch({ type: "SET_SPINNING", payload: true });
