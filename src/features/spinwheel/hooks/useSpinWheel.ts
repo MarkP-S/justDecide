@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useReducer, useRef } from "react";
 import { Animated, Easing, Keyboard } from "react-native";
 import {
-    calculateSpinResult,
     calculateTotalRotation,
-} from "../utils/wheelMath";
+    getWinningIndex,
+    normalizeResultIndex
+} from "../utils/spinLogic";
+
 
 /* -------------------------
    STATE TYPE
@@ -145,6 +147,7 @@ export default function useSpinWheel() {
     const rotation = useRef(new Animated.Value(0)).current;
     const currentRotation = useRef(0);
     const menuAnim = useRef(new Animated.Value(0)).current;
+    const previousRotation = useRef(0);
 
     const segmentAngle = useMemo(
         () => 360 / state.segments.length,
@@ -193,22 +196,28 @@ export default function useSpinWheel() {
        SPIN LOGIC (USES PURE UTILS)
     --------------------------*/
     const spin = () => {
-
-        if (state.spinning) return;
+        if (state.spinning || state.segments.length === 0) return;
 
         dispatch({ type: "SET_SPINNING", payload: true });
         dispatch({ type: "SET_RESULT", payload: null });
 
-        const { winningIndex, randomOffset, fullRotations, targetAngle } =
-            calculateSpinResult(state.segments.length, segmentAngle);
+        const segmentAngle = 360 / state.segments.length;
 
-        const totalRotation = calculateTotalRotation(
-            currentRotation.current,
-            fullRotations,
-            targetAngle,
-            randomOffset
-        );
+        // 🎯 pick a winner
+        const winningIndex = getWinningIndex(state.segments.length);
 
+        // 🎯 calculate total rotation (visual)
+        const totalRotation = calculateTotalRotation({
+            currentRotation: currentRotation.current,
+            winningIndex,
+            segmentAngle,
+            segmentsLength: state.segments.length,
+        });
+
+        // store previous BEFORE updating
+        previousRotation.current = currentRotation.current;
+
+        // update current
         currentRotation.current = totalRotation;
 
         rotation.setValue(0);
@@ -219,8 +228,18 @@ export default function useSpinWheel() {
             easing: Easing.bezier(0.33, 1, 0.68, 1),
             useNativeDriver: true,
         }).start(() => {
-            const index = winningIndex;
-            dispatch({ type: "SET_RESULT", payload: state.segments[index] });
+            // 🎯 derive result from final rotation (source of truth)
+            const index = normalizeResultIndex({
+                currentRotation: currentRotation.current,
+                segmentAngle,
+                segmentsLength: state.segments.length,
+            });
+
+            dispatch({
+                type: "SET_RESULT",
+                payload: state.segments[index],
+            });
+
             dispatch({ type: "SET_SPINNING", payload: false });
         });
     };
@@ -232,6 +251,7 @@ export default function useSpinWheel() {
         currentRotation,
         menuAnim,
         segmentAngle,
+        previousRotation,
 
         dispatch,
 

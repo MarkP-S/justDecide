@@ -5,7 +5,8 @@ import {
     Platform,
     StatusBar,
     Text,
-    TouchableOpacity,
+    TextInput,
+    TouchableOpacity
 } from "react-native";
 
 // feature hook
@@ -13,9 +14,12 @@ import useSpinWheel from "./hooks/useSpinWheel";
 
 // feature components
 import { useLocalSearchParams, useRouter } from "expo-router";
+import AppModal from "./components/AppModal";
 import Controls from "./components/Controls";
 import WheelCanvas from "./components/WheelCanvas";
 import WheelMenu from "./components/WheelMenu";
+import useWheelPresets from "./hooks/useWheelPresets";
+import { WheelPreset } from "./types";
 
 
 import {
@@ -54,6 +58,7 @@ export default function SpinWheelScreen() {
     } = useSpinWheel();
 
     const { segments: presetSegments } = useLocalSearchParams();
+    const { presets, addPreset } = useWheelPresets();
 
     useEffect(() => {
         if (!presetSegments) return;
@@ -69,6 +74,25 @@ export default function SpinWheelScreen() {
     const { width } = Dimensions.get("window");
     const wheelSize = width - 40;
     const radius = wheelSize / 2;
+
+    const [showSaveModal, setShowSaveModal] = React.useState(false);
+    const [presetName, setPresetName] = React.useState("");
+
+    const handleSave = () => {
+        if (!presetName.trim()) return;
+
+        const preset: WheelPreset = {
+            id: Date.now().toString(),
+            name: presetName.trim(),
+            segments,
+            createdAt: Date.now(),
+        };
+
+        addPreset(preset);
+
+        setPresetName("");
+        setShowSaveModal(false);
+    };
 
     return (
         <KeyboardAvoidingView style={{ flex: 1, backgroundColor: "#121212" }}
@@ -135,7 +159,44 @@ export default function SpinWheelScreen() {
                     setMenuVisible(false);
                 }}
                 onOpenPresets={() => router.push("/presets")}
+                onSavePreset={() => {
+                    setMenuVisible(false);
+                    setShowSaveModal(true);
+                }}
             />
-        </KeyboardAvoidingView>
+
+<AppModal
+    visible={showSaveModal}
+    onClose={() => setShowSaveModal(false)}
+>
+    <Text style={{ color: "white", marginBottom: 10 }}>
+        Name your preset
+    </Text>
+
+    <TextInput
+        autoFocus
+        value={presetName}
+        onChangeText={setPresetName}
+        placeholder="e.g. Dinner choices"
+        placeholderTextColor="#666"
+        style={{
+            borderWidth: 1,
+            borderColor: "#444",
+            color: "white",
+            padding: 10,
+            marginBottom: 15,
+        }}
+    />
+
+    <TouchableOpacity
+        onPress={handleSave}
+        disabled={!presetName.trim()}
+    >
+        <Text style={{ color: presetName.trim() ? "#4CAF50" : "#666" }}>
+            Save
+        </Text>
+    </TouchableOpacity>
+</AppModal>
+        </KeyboardAvoidingView >
     );
 }

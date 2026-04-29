@@ -16,42 +16,49 @@ export function createSegmentPath(
 
     return `M${radius},${radius} L${x1},${y1} A${radius},${radius} 0 0 1 ${x2},${y2} Z`;
 }
+//Deprecated:
+// export function calculateSpinResult(
+//     segmentCount: number,
+//     segmentAngle: number
+// ) {
+//     const winningIndex = Math.floor(Math.random() * segmentCount);
 
-export function calculateSpinResult(
-    segmentCount: number,
-    segmentAngle: number
-) {
-    const winningIndex = Math.floor(Math.random() * segmentCount);
+//     const padding = segmentAngle * 0.2;
 
-    const padding = segmentAngle * 0.2;
+//     const isSingle = segmentCount === 1;
 
-    const isSingle = segmentCount === 1;
+//     const randomOffset = isSingle
+//         ? 0 // keep it centered
+//         : padding + Math.random() * (segmentAngle - 2 * padding);
 
-    const randomOffset = isSingle
-        ? 0 // keep it centered
-        : padding + Math.random() * (segmentAngle - 2 * padding);
+//     const fullRotations = 360 * 6;
 
-    const fullRotations = 360 * 6;
+//     const targetAngle =
+//         360 - (winningIndex * segmentAngle + segmentAngle / 2);
 
-    const targetAngle =
-        360 - (winningIndex * segmentAngle + segmentAngle / 2);
+//     return {
+//         winningIndex,
+//         randomOffset,
+//         fullRotations,
+//         targetAngle,
+//     };
+// }
 
-    return {
-        winningIndex,
-        randomOffset,
-        fullRotations,
-        targetAngle,
-    };
-}
+// export function calculateTotalRotation(params: {
+//     currentRotation: number;
+//     winningIndex: number;
+//     segmentAngle: number;
+//     segmentsLength: number;
+// }) {
+//     const { currentRotation, winningIndex, segmentAngle } = params;
 
-export function calculateTotalRotation(
-    currentRotation: number,
-    fullRotations: number,
-    targetAngle: number,
-    randomOffset: number
-) {
-    return currentRotation + fullRotations + targetAngle + randomOffset;
-}
+//     const fullRotations = 360 * 6;
+
+//     const targetAngle =
+//         360 - (winningIndex * segmentAngle + segmentAngle / 2);
+
+//     return currentRotation + fullRotations + targetAngle;
+// }
 
 export const getSegmentColor = (index: number, total: number) => {
     if (total === 1) {
