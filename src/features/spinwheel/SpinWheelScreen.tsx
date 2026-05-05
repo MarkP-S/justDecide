@@ -44,6 +44,7 @@ export default function SpinWheelScreen() {
         //segments,
         //result,
         spinning,
+        spin,
         input,
         setInput,
         addSegment,
@@ -55,7 +56,8 @@ export default function SpinWheelScreen() {
         setEditingValue,
         saveEdit,
         keyboardHeight,
-        spin,
+        startSpinCruise,
+        releaseSpinCruise,
         segmentAngle,
         resetWheel,
         shuffleSegments,
@@ -297,7 +299,6 @@ export default function SpinWheelScreen() {
                     radius={radius}
                     segmentAngle={segmentAngle}
                     rotation={rotation}
-                    currentRotation={currentRotation}
                     createPath={createPath}
                     getSegmentColor={getSegmentColor}
                     formatLabel={formatLabel}
@@ -305,6 +306,8 @@ export default function SpinWheelScreen() {
 
                 <Controls
                     spin={spin}
+                    startSpinCruise={startSpinCruise}
+                    releaseSpinCruise={releaseSpinCruise}
                     spinning={spinning}
                     input={input}
                     setInput={setInput}

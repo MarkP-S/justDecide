@@ -9,7 +9,6 @@ type Props = {
     radius: number;
     segmentAngle: number;
     rotation: Animated.Value;
-    currentRotation: React.MutableRefObject<number>;
     createPath: (index: number, radius: number, totalSegments: number) => string;
     getSegmentColor: (index: number, total: number) => string;
     formatLabel: (text: string | number) => string;
@@ -21,7 +20,6 @@ export default function WheelCanvas({
     radius,
     segmentAngle,
     rotation,
-    currentRotation,
     createPath,
     getSegmentColor,
     formatLabel,
@@ -55,11 +53,9 @@ export default function WheelCanvas({
                             transform: [
                                 {
                                     rotate: rotation.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [
-                                            `${currentRotation.current - 360 * 6}deg`,
-                                            `${currentRotation.current}deg`,
-                                        ],
+                                        inputRange: [-21600, 21600],
+                                        outputRange: ["-21600deg", "21600deg"],
+                                        extrapolate: "extend",
                                     }),
                                 },
                             ],

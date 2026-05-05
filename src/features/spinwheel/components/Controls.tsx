@@ -29,6 +29,8 @@ import { Segment } from "../types";
 
 type Props = {
     spin: () => void;
+    startSpinCruise: () => void;
+    releaseSpinCruise: () => void;
     spinning: boolean;
     input: string;
     setInput: (text: string) => void;
@@ -49,6 +51,8 @@ type Props = {
 
 export default function Controls({
     spin,
+    startSpinCruise,
+    releaseSpinCruise,
     spinning,
     input,
     setInput,
@@ -81,6 +85,8 @@ export default function Controls({
     const scrollYRef = React.useRef(0);
     const editRowRef = React.useRef<View>(null);
     const rowOffsetsRef = React.useRef<Record<number, number>>({});
+    const holdTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const holdActivatedRef = React.useRef(false);
 
     const scrollActiveRowAboveKeyboard = React.useCallback((kbHeight: number) => {
         if (kbHeight <= 0 || editingIndex === null) return;
@@ -232,6 +238,34 @@ export default function Controls({
         addSegment(input);
     }, [addSegment, input]);
 
+    const handleSpinPressIn = React.useCallback(() => {
+        holdActivatedRef.current = false;
+        if (holdTimerRef.current) {
+            clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = null;
+        }
+        holdTimerRef.current = setTimeout(() => {
+            holdTimerRef.current = null;
+            holdActivatedRef.current = true;
+            startSpinCruise();
+        }, 180);
+    }, [startSpinCruise]);
+
+    const handleSpinPressOut = React.useCallback(() => {
+        if (holdTimerRef.current) {
+            clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = null;
+        }
+
+        if (holdActivatedRef.current) {
+            holdActivatedRef.current = false;
+            releaseSpinCruise();
+            return;
+        }
+
+        spin();
+    }, [releaseSpinCruise, spin]);
+
     return (
         <>
             <View
@@ -248,8 +282,8 @@ export default function Controls({
                 </View>
 
                 <TouchableOpacity
-                    onPress={spin}
-                    disabled={spinning}
+                    onPressIn={handleSpinPressIn}
+                    onPressOut={handleSpinPressOut}
                     style={[styles.spinButton, spinning && styles.spinButtonDisabled]}
                 >
                     <MaterialCommunityIcons name="target" size={28} color="#eafff0" />
