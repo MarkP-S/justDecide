@@ -1,8 +1,11 @@
-export type Segment = string | number;
+export type Segment = {
+    id: string;
+    label: string;
+};
 
 export type WheelPreset = {
     id: string;
     name: string;
-    segments: (string | number)[];
+    segments: Segment[];
     createdAt: number;
 };

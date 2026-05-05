@@ -1,3 +1,5 @@
+import { useWheelStore } from "@/src/store/useWheelStore";
+import { createId } from "@/src/utils/createId";
 import { useEffect, useMemo, useReducer, useRef } from "react";
 import { Animated, Easing, Keyboard } from "react-native";
 import {
@@ -11,9 +13,9 @@ import {
    STATE TYPE
 --------------------------*/
 type State = {
-    segments: (string | number)[];
+    //segments: Segment[]
     input: string;
-    result: string | number | null;
+    //result: string | null;
     spinning: boolean;
 
     editingIndex: number | null;
@@ -30,17 +32,17 @@ type State = {
 --------------------------*/
 type Action =
     | { type: "SET_INPUT"; payload: string }
-    | { type: "ADD_SEGMENT" }
-    | { type: "REMOVE_SEGMENT"; payload: number }
-    | { type: "SET_SEGMENTS"; payload: (string | number)[] }
-    | { type: "SET_RESULT"; payload: string | number | null }
+    //| { type: "ADD_SEGMENT" }
+    //| { type: "REMOVE_SEGMENT"; payload: number }
+    //| { type: "SET_SEGMENTS"; payload: Segment[] }
+    //| { type: "SET_RESULT"; payload: string | null }
     | { type: "SET_SPINNING"; payload: boolean }
     | { type: "SET_EDIT_INDEX"; payload: number | null }
     | { type: "SET_EDIT_VALUE"; payload: string }
-    | { type: "SAVE_EDIT" }
+    //| { type: "SAVE_EDIT" }
     | { type: "SET_KEYBOARD"; payload: number }
-    | { type: "RESET_WHEEL" }
-    | { type: "SHUFFLE" }
+    //| { type: "RESET_WHEEL" }
+    //| { type: "SHUFFLE" }
     | { type: "SET_MENU_VISIBLE"; payload: boolean }
     | { type: "SET_MENU_MOUNTED"; payload: boolean };
 
@@ -52,27 +54,6 @@ function reducer(state: State, action: Action): State {
         case "SET_INPUT":
             return { ...state, input: action.payload };
 
-        case "ADD_SEGMENT":
-            if (!state.input.trim()) return state;
-            return {
-                ...state,
-                segments: [...state.segments, state.input.trim()],
-                input: "",
-            };
-
-        case "REMOVE_SEGMENT":
-            if (state.segments.length <= 1) return state;
-            return {
-                ...state,
-                segments: state.segments.filter((_, i) => i !== action.payload),
-            };
-
-        case "SET_SEGMENTS":
-            return { ...state, segments: action.payload };
-
-        case "SET_RESULT":
-            return { ...state, result: action.payload };
-
         case "SET_SPINNING":
             return { ...state, spinning: action.payload };
 
@@ -82,32 +63,8 @@ function reducer(state: State, action: Action): State {
         case "SET_EDIT_VALUE":
             return { ...state, editingValue: action.payload };
 
-        case "SAVE_EDIT": {
-            if (state.editingIndex === null) return state;
-
-            const updated = [...state.segments];
-            updated[state.editingIndex] =
-                state.editingValue.trim() || updated[state.editingIndex];
-
-            return {
-                ...state,
-                segments: updated,
-                editingIndex: null,
-                editingValue: "",
-            };
-        }
-
         case "SET_KEYBOARD":
             return { ...state, keyboardHeight: action.payload };
-
-        case "RESET_WHEEL":
-            return { ...state, segments: ["Kitties", "More Kitties"] };
-
-        case "SHUFFLE":
-            return {
-                ...state,
-                segments: [...state.segments].sort(() => Math.random() - 0.5),
-            };
 
         case "SET_MENU_VISIBLE":
             return { ...state, menuVisible: action.payload };
@@ -124,9 +81,9 @@ function reducer(state: State, action: Action): State {
    INITIAL STATE
 --------------------------*/
 const initialState: State = {
-    segments: ["Add options"],
+    //segments: [{ id: "1", label: "Add options" }],
     input: "",
-    result: null,
+    //result: null,
     spinning: false,
 
     editingIndex: null,
@@ -143,6 +100,9 @@ const initialState: State = {
 --------------------------*/
 export default function useSpinWheel() {
     const [state, dispatch] = useReducer(reducer, initialState);
+    const segments = useWheelStore((s) => s.segments);
+    const setSegments = useWheelStore((s) => s.setSegments);
+    const setResult = useWheelStore((s) => s.setResult);
 
     const rotation = useRef(new Animated.Value(0)).current;
     const currentRotation = useRef(0);
@@ -150,8 +110,8 @@ export default function useSpinWheel() {
     const previousRotation = useRef(0);
 
     const segmentAngle = useMemo(
-        () => 360 / state.segments.length,
-        [state.segments.length]
+        () => 360 / segments.length,
+        [segments.length]
     );
 
     /* -------------------------
@@ -195,92 +155,130 @@ export default function useSpinWheel() {
     /* -------------------------
        SPIN LOGIC (USES PURE UTILS)
     --------------------------*/
-    const spin = () => {
-        if (state.spinning || state.segments.length === 0) return;
+const spin = () => {
+    if (state.spinning || segments.length === 0) return;
 
-        dispatch({ type: "SET_SPINNING", payload: true });
-        dispatch({ type: "SET_RESULT", payload: null });
+    dispatch({ type: "SET_SPINNING", payload: true });
 
-        const segmentAngle = 360 / state.segments.length;
+    // clear result from global store
+    setResult(null);
 
-        // 🎯 pick a winner
-        const winningIndex = getWinningIndex(state.segments.length);
+    const winningIndex = getWinningIndex(segments.length);
 
-        // 🎯 calculate total rotation (visual)
-        const totalRotation = calculateTotalRotation({
+    const totalRotation = calculateTotalRotation({
+        currentRotation: currentRotation.current,
+        winningIndex,
+        segmentAngle,
+        segmentsLength: segments.length,
+    });
+
+    previousRotation.current = currentRotation.current;
+    currentRotation.current = totalRotation;
+
+    rotation.setValue(0);
+
+    Animated.timing(rotation, {
+        toValue: 1,
+        duration: 4000,
+        easing: Easing.bezier(0.33, 1, 0.68, 1),
+        useNativeDriver: true,
+    }).start(() => {
+        const index = normalizeResultIndex({
             currentRotation: currentRotation.current,
-            winningIndex,
             segmentAngle,
-            segmentsLength: state.segments.length,
+            segmentsLength: segments.length,
         });
 
-        // store previous BEFORE updating
-        previousRotation.current = currentRotation.current;
+        // ✅ set result via Zustand
+        setResult(segments[index].label);
 
-        // update current
-        currentRotation.current = totalRotation;
-
-        rotation.setValue(0);
-
-        Animated.timing(rotation, {
-            toValue: 1,
-            duration: 4000,
-            easing: Easing.bezier(0.33, 1, 0.68, 1),
-            useNativeDriver: true,
-        }).start(() => {
-            // 🎯 derive result from final rotation (source of truth)
-            const index = normalizeResultIndex({
-                currentRotation: currentRotation.current,
-                segmentAngle,
-                segmentsLength: state.segments.length,
-            });
-
-            dispatch({
-                type: "SET_RESULT",
-                payload: state.segments[index],
-            });
-
-            dispatch({ type: "SET_SPINNING", payload: false });
-        });
-    };
+        dispatch({ type: "SET_SPINNING", payload: false });
+    });
+};
 
     return {
-        ...state,
+    ...state,
 
-        rotation,
-        currentRotation,
-        menuAnim,
-        segmentAngle,
-        previousRotation,
+    // 👇 from Zustand
+    segments,
 
-        dispatch,
+    rotation,
+    currentRotation,
+    menuAnim,
+    segmentAngle,
+    previousRotation,
 
-        spin,
+    spin,
 
-        // convenience actions (optional wrapper layer)
-        setInput: (v: string) =>
-            dispatch({ type: "SET_INPUT", payload: v }),
+    // -------------------------
+    // INPUT
+    // -------------------------
+    setInput: (v: string) =>
+        dispatch({ type: "SET_INPUT", payload: v }),
 
-        addSegment: () => dispatch({ type: "ADD_SEGMENT" }),
-        removeSegment: (i: number) =>
-            dispatch({ type: "REMOVE_SEGMENT", payload: i }),
+    // -------------------------
+    // SEGMENTS (ZUSTAND)
+    // -------------------------
+    addSegment: (draftLabel?: string) => {
+        const text = (draftLabel !== undefined ? draftLabel : state.input).trim();
+        if (!text) return;
 
-        saveEdit: () => dispatch({ type: "SAVE_EDIT" }),
+        setSegments([
+            ...segments,
+            {
+                id: createId(),
+                label: text,
+            },
+        ]);
 
-        resetWheel: () => dispatch({ type: "RESET_WHEEL" }),
-        shuffleSegments: () => dispatch({ type: "SHUFFLE" }),
+        dispatch({ type: "SET_INPUT", payload: "" });
+    },
 
-        setMenuVisible: (v: boolean) =>
-            dispatch({ type: "SET_MENU_VISIBLE", payload: v }),
+    removeSegment: (i: number) => {
+        if (segments.length <= 1) return;
 
-        setSegments: (s: (string | number)[]) =>
-            dispatch({ type: "SET_SEGMENTS", payload: s }),
+        setSegments(segments.filter((_, index) => index !== i));
+    },
 
-        setEditingIndex: (v: number | null) =>
-            dispatch({ type: "SET_EDIT_INDEX", payload: v }),
+    saveEdit: () => {
+        if (state.editingIndex === null) return;
 
-        setEditingValue: (v: string) =>
-            dispatch({ type: "SET_EDIT_VALUE", payload: v }),
-    };
+        const updated = [...segments];
 
+        updated[state.editingIndex] = {
+            ...updated[state.editingIndex],
+            label:
+                state.editingValue.trim() ||
+                updated[state.editingIndex].label,
+        };
+
+        setSegments(updated);
+
+        dispatch({ type: "SET_EDIT_INDEX", payload: null });
+        dispatch({ type: "SET_EDIT_VALUE", payload: "" });
+    },
+
+    resetWheel: () => {
+        setSegments([
+            { id: "1", label: "Kitties" },
+            { id: "2", label: "More Kitties" },
+        ]);
+    },
+
+    shuffleSegments: () => {
+        setSegments([...segments].sort(() => Math.random() - 0.5));
+    },
+
+    // -------------------------
+    // UI STATE (REDUCER)
+    // -------------------------
+    setMenuVisible: (v: boolean) =>
+        dispatch({ type: "SET_MENU_VISIBLE", payload: v }),
+
+    setEditingIndex: (v: number | null) =>
+        dispatch({ type: "SET_EDIT_INDEX", payload: v }),
+
+    setEditingValue: (v: string) =>
+        dispatch({ type: "SET_EDIT_VALUE", payload: v }),
+};
 }

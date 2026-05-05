@@ -2,13 +2,16 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
     FlatList,
+    Keyboard,
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    TouchableWithoutFeedback,
+    View,
 } from "react-native";
 
-import { WheelPreset } from "../spinwheel/types";
+import { createId } from "@/src/utils/createId";
+import { Segment, WheelPreset } from "../spinwheel/types";
 import useWheelPresets from "./hooks/useWheelPresets";
 
 export default function PresetsScreen() {
@@ -21,7 +24,7 @@ export default function PresetsScreen() {
     const [creating, setCreating] = useState(false);
     const [newName, setNewName] = useState("");
     const [newItem, setNewItem] = useState("");
-    const [newSegments, setNewSegments] = useState<(string | number)[]>([]);
+    const [newSegments, setNewSegments] = useState<Segment[]>([]);
 
     const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
     const [editingItemValue, setEditingItemValue] = useState("");
@@ -41,7 +44,16 @@ export default function PresetsScreen() {
 
     const addItemToNewPreset = () => {
         if (!newItem.trim()) return;
-        setNewSegments((prev) => [...prev, newItem.trim()]);
+
+        const next = [
+            ...newSegments,
+            {
+                id: createId(),
+                label: newItem.trim(),
+            },
+        ];
+
+        setNewSegments(next);
         setNewItem("");
     };
 
@@ -54,29 +66,37 @@ export default function PresetsScreen() {
     const startEditPreset = (preset: WheelPreset) => {
         setEditingPresetId(preset.id);
         setNewName(preset.name);
-        setNewSegments(preset.segments);
+
+        const normalized = preset.segments.map((s) => ({
+            id:
+                typeof s === "object" &&
+                s !== null &&
+                "id" in s &&
+                typeof s.id === "string" &&
+                s.id.trim().length > 0
+                    ? s.id
+                    : createId(),
+            label: typeof s === "string" ? s : s.label,
+        }));
+
+        setNewSegments(normalized);
         setCreating(true);
     };
 
     const savePreset = () => {
         if (!newName.trim() || newSegments.length === 0) return;
 
+        const preset: WheelPreset = {
+            id: editingPresetId ?? createId(),
+            name: newName.trim(),
+            segments: newSegments, // ✅ keep objects
+            createdAt: Date.now(),
+        };
+
         if (editingPresetId) {
-            // UPDATE existing preset
-            updatePreset({
-                id: editingPresetId,
-                name: newName.trim(),
-                segments: newSegments,
-                createdAt: Date.now(),
-            });
+            updatePreset(preset);
         } else {
-            // CREATE new preset
-            addPreset({
-                id: Date.now().toString(),
-                name: newName.trim(),
-                segments: newSegments,
-                createdAt: Date.now(),
-            });
+            addPreset(preset);
         }
 
         // reset
@@ -132,7 +152,7 @@ export default function PresetsScreen() {
                                     }}
                                 >
                                     <Text style={{ color: "white", fontSize: 12 }}>
-                                        {item}
+                                        {item.label}
                                     </Text>
                                 </View>
                             ))}
@@ -180,190 +200,206 @@ export default function PresetsScreen() {
     };
 
     return (
-        <View style={{ flex: 1, backgroundColor: "#121212", padding: 16 }}>
+        <TouchableWithoutFeedback
+            onPress={() => {
+                setEditingItemIndex(null);
+                setEditingItemValue("");
+                Keyboard.dismiss();
+            }}
+        >
+            <View style={{ flex: 1, backgroundColor: "#121212", padding: 16 }}>
 
-            {/* HEADER */}
-            <Text style={{ color: "white", fontSize: 26, fontWeight: "700", textAlign: "center", marginTop: 45, }}>
-                Your Wheels
-            </Text>
+                {/* HEADER */}
+                <Text style={{ color: "white", fontSize: 26, fontWeight: "700", textAlign: "center", marginTop: 45, }}>
+                    Your Wheels
+                </Text>
 
-            {/* ADD BUTTON */}
-            {!creating && (
-                <TouchableOpacity
-                    onPress={() => {
-                        setCreating(true);
-                        setEditingPresetId(null);
-                        setNewName("");
-                        setNewSegments([]);
-                    }}
-                    style={{
-                        marginTop: 14,
-                        backgroundColor: "#2E7D32",
-                        padding: 12,
-                        borderRadius: 12,
-                        alignItems: "center",
-                    }}
-                >
-                    <Text style={{ color: "white", fontWeight: "600" }}>
-                        + Add Preset
-                    </Text>
-                </TouchableOpacity>
-            )}
-
-            {/* CREATE PRESET FORM */}
-            {creating && (
-                <View
-                    style={{
-                        backgroundColor: "#1E1E1E",
-                        padding: 14,
-                        borderRadius: 14,
-                        marginTop: 14,
-                        borderWidth: 1,
-                        borderColor: "#2A2A2A",
-                    }}
-                >
-                    <TextInput
-                        placeholder="Wheel name"
-                        placeholderTextColor="#666"
-                        value={newName}
-                        onChangeText={setNewName}
-                        style={{
-                            color: "white",
-                            borderBottomWidth: 1,
-                            borderBottomColor: "#333",
-                            marginBottom: 10,
+                {/* ADD BUTTON */}
+                {!creating && (
+                    <TouchableOpacity
+                        onPress={() => {
+                            setCreating(true);
+                            setEditingPresetId(null);
+                            setNewName("");
+                            setNewSegments([]);
                         }}
-                    />
+                        style={{
+                            marginTop: 14,
+                            backgroundColor: "#2E7D32",
+                            padding: 12,
+                            borderRadius: 12,
+                            alignItems: "center",
+                        }}
+                    >
+                        <Text style={{ color: "white", fontWeight: "600" }}>
+                            + Add Preset
+                        </Text>
+                    </TouchableOpacity>
+                )}
 
-                    <View style={{ flexDirection: "row", marginBottom: 10 }}>
+                {/* CREATE PRESET FORM */}
+                {creating && (
+                    <View
+                        style={{
+                            backgroundColor: "#1E1E1E",
+                            padding: 14,
+                            borderRadius: 14,
+                            marginTop: 14,
+                            borderWidth: 1,
+                            borderColor: "#2A2A2A",
+                        }}
+                    >
                         <TextInput
-                            placeholder="Add option"
+                            placeholder="Wheel name"
                             placeholderTextColor="#666"
-                            value={newItem}
-                            onChangeText={setNewItem}
+                            value={newName}
+                            onChangeText={setNewName}
                             style={{
-                                flex: 1,
                                 color: "white",
                                 borderBottomWidth: 1,
                                 borderBottomColor: "#333",
-                                marginRight: 10,
+                                marginBottom: 10,
                             }}
                         />
 
-                        <TouchableOpacity
-                            onPress={addItemToNewPreset}
-                            style={{
-                                backgroundColor: "#2E7D32",
-                                padding: 10,
-                                borderRadius: 8,
-                            }}
-                        >
-                            <Text style={{ color: "white" }}>Add</Text>
-                        </TouchableOpacity>
-                    </View>
+                        <View style={{ flexDirection: "row", marginBottom: 10 }}>
+                            <TextInput
+                                placeholder="Add option"
+                                placeholderTextColor="#666"
+                                value={newItem}
+                                onChangeText={setNewItem}
+                                style={{
+                                    flex: 1,
+                                    color: "white",
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: "#333",
+                                    marginRight: 10,
+                                }}
+                            />
 
-                    {/* PREVIEW ITEMS */}
-                    <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                        {newSegments.map((item, i) => {
-                            const isEditing = editingItemIndex === i;
+                            <TouchableOpacity
+                                onPress={addItemToNewPreset}
+                                style={{
+                                    backgroundColor: "#2E7D32",
+                                    padding: 10,
+                                    borderRadius: 8,
+                                }}
+                            >
+                                <Text style={{ color: "white" }}>Add</Text>
+                            </TouchableOpacity>
+                        </View>
 
-                            return (
-                                <View
-                                    key={i}
-                                    style={{
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                        backgroundColor: "#333",
-                                        borderRadius: 8,
-                                        marginRight: 6,
-                                        marginBottom: 6,
-                                        paddingHorizontal: 8,
-                                        paddingVertical: 4,
-                                    }}
-                                >
-                                    {isEditing ? (
-                                        <TextInput
-                                            onBlur={() => {
-                                                setEditingItemIndex(null);
-                                                setEditingItemValue("");
-                                            }}
-                                            autoFocus
-                                            value={editingItemValue}
-                                            onChangeText={setEditingItemValue}
-                                            onSubmitEditing={() => {
-                                                const updated = [...newSegments];
-                                                updated[i] =
-                                                    editingItemValue.trim() || updated[i];
-                                                setNewSegments(updated);
-                                                setEditingItemIndex(null);
-                                                setEditingItemValue("");
-                                            }}
-                                            style={{
-                                                color: "white",
-                                                minWidth: 60,
-                                            }}
-                                        />
-                                    ) : (
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                setEditingItemIndex(i);
-                                                setEditingItemValue(String(item));
-                                            }}
-                                        >
-                                            <Text style={{ color: "white", fontSize: 12, paddingRight: 20 }}>
-                                                {item}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    )}
+                        {/* PREVIEW ITEMS */}
+                        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                            {newSegments.map((item, i) => {
+                                const isEditing = editingItemIndex === i;
 
-                                    {/* DELETE BUTTON */}
-                                    <TouchableOpacity
-                                        onPress={() =>
-                                            setNewSegments((prev) =>
-                                                prev.filter((_, index) => index !== i)
-                                            )
-                                        }
-                                        style={{ marginLeft: 6 }}
+                                return (
+                                    <View
+                                        key={item.id}
+                                        style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            backgroundColor: "#333",
+                                            borderRadius: 8,
+                                            marginRight: 6,
+                                            marginBottom: 6,
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 4,
+                                        }}
+                                        onStartShouldSetResponder={() => true}
                                     >
-                                        <Text style={{ color: "#FF6B6B", fontWeight: "bold" }}>
-                                            ✕
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
-                            );
-                        })}
+                                        {isEditing ? (
+                                            <TextInput
+                                                autoFocus
+                                                value={editingItemValue}
+                                                onChangeText={setEditingItemValue}
+                                                onSubmitEditing={() => {
+                                                    const updated = newSegments.map((seg) =>
+                                                        seg.id === item.id
+                                                            ? {
+                                                                ...seg,
+                                                                label:
+                                                                    editingItemValue.trim() ||
+                                                                    seg.label,
+                                                            }
+                                                            : seg
+                                                    );
+
+                                                    setNewSegments(updated);
+                                                    setEditingItemIndex(null);
+                                                    setEditingItemValue("");
+                                                }}
+                                                onBlur={() => {
+                                                    setEditingItemIndex(null);
+                                                    setEditingItemValue("");
+                                                }}
+                                                style={{ color: "white", minWidth: 60 }}
+                                            />
+                                        ) : (
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    setEditingItemIndex(i);
+                                                    setEditingItemValue(item.label);
+                                                }}
+                                            >
+                                                <Text style={{ color: "white", fontSize: 12, paddingRight: 10 }}>
+                                                    {item.label}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
+
+                                        {/* DELETE BUTTON (FIXED) */}
+                                        {(editingItemIndex === null || editingItemIndex === i) && (
+                                            <TouchableOpacity
+                                                onPress={() =>
+                                                    setNewSegments((prev) =>
+                                                        prev.filter((seg) => seg.id !== item.id)
+                                                    )
+                                                }
+                                                style={{ marginLeft: 6 }}
+                                            >
+                                                <Text style={{ color: "#FF6B6B", fontWeight: "bold" }}>
+                                                    ✕
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                );
+                            })}
+                        </View>
+
+                        {/* ACTIONS */}
+                        <View style={{ flexDirection: "row", marginTop: 12, justifyContent: "space-between" }}>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setCreating(false);
+                                    setEditingPresetId(null);
+                                    setNewName("");
+                                    setNewSegments([]);
+                                }}
+                            >
+                                <Text style={{ color: "#888" }}>Cancel</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity onPress={savePreset}>
+                                <Text style={{ color: "#4CAF50", fontWeight: "600" }}>
+                                    {editingPresetId ? "Save Changes" : "Save Wheel"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
+                )}
 
-                    {/* ACTIONS */}
-                    <View style={{ flexDirection: "row", marginTop: 12, justifyContent: "space-between" }}>
-                        <TouchableOpacity
-                            onPress={() => {
-                                setCreating(false);
-                                setEditingPresetId(null);
-                                setNewName("");
-                                setNewSegments([]);
-                            }}
-                        >
-                            <Text style={{ color: "#888" }}>Cancel</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity onPress={savePreset}>
-                            <Text style={{ color: "#4CAF50", fontWeight: "600" }}>
-                                {editingPresetId ? "Save Changes" : "Save Wheel"}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            )}
-
-            {/* LIST */}
-            <FlatList
-                data={presets}
-                keyExtractor={(item) => item.id}
-                renderItem={renderItem}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingTop: 16 }}
-            />
-        </View>
+                {/* LIST */}
+                <FlatList
+                    data={presets}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderItem}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingTop: 16 }}
+                />
+            </View>
+        </TouchableWithoutFeedback>
     );
 }

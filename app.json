@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "test",
+    "name": "JustDecide",
     "slug": "test",
     "extra": {
       "eas": {
@@ -9,7 +9,8 @@
     },
     "owner": "markp-s",
     "android": {
-      "package": "com.markps.test"
+      "package": "com.markps.justdecide",
+      "softwareKeyboardLayoutMode": "resize"
     }
   }
 }

@@ -1,10 +1,10 @@
 import React from "react";
-import { Animated, Text, View } from "react-native";
+import { Animated, View } from "react-native";
 import Svg, { G, Path, Text as SvgText } from "react-native-svg";
+import { Segment } from "../types";
 
 type Props = {
-    result: string | number | null;
-    segments: (string | number)[];
+    segments: Segment[];
     wheelSize: number;
     radius: number;
     segmentAngle: number;
@@ -16,7 +16,6 @@ type Props = {
 };
 
 export default function WheelCanvas({
-    result,
     segments,
     wheelSize,
     radius,
@@ -29,17 +28,8 @@ export default function WheelCanvas({
 }: Props) {
     return (
         <>
-            {/* RESULT */}
-            <View style={{ height: 120, top: 30, justifyContent: "center", alignItems: "center" }}>
-                {result !== null && (
-                    <Text style={{ fontSize: 28, color: "white", fontWeight: "bold" }}>
-                        {result}
-                    </Text>
-                )}
-            </View>
-
             {/* WHEEL */}
-            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 8 }}>
                 <View style={{ width: wheelSize, height: wheelSize, justifyContent: "center", alignItems: "center", }}>
 
                     {/* POINTER */}
@@ -110,7 +100,7 @@ export default function WheelCanvas({
                                             alignmentBaseline="middle"
                                             transform={`rotate(${correctedAngle}, ${x}, ${y})`}
                                         >
-                                            {formatLabel(item)}
+                                            {formatLabel(item.label)}
                                         </SvgText>
                                     );
                                 })}
