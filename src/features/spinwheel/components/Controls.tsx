@@ -43,6 +43,8 @@ type Props = {
     keyboardHeight: number;
     result: string | null;
     shuffleSegments: () => void;
+    onSaveWheel: () => void;
+    saveWheelDisabled: boolean;
 };
 
 export default function Controls({
@@ -61,6 +63,8 @@ export default function Controls({
     keyboardHeight,
     result,
     shuffleSegments,
+    onSaveWheel,
+    saveWheelDisabled,
 }: Props) {
     const [editorVisible, setEditorVisible] = React.useState(false);
     const [addInputFocused, setAddInputFocused] = React.useState(false);
@@ -238,7 +242,9 @@ export default function Controls({
             >
                 <View style={styles.resultCard}>
                     <Text style={styles.resultLabel}>RESULT</Text>
-                    <Text style={styles.resultText}>{result ?? "Spin to pick an option"}</Text>
+                    <Text style={styles.resultText}>
+                        {result ?? (spinning ? "..." : "Spin to pick an option")}
+                    </Text>
                 </View>
 
                 <TouchableOpacity
@@ -252,11 +258,16 @@ export default function Controls({
 
                 <View style={styles.quickActions}>
                     <TouchableOpacity
-                        style={styles.quickActionBtn}
-                        onPress={openEditor}
+                        style={[styles.quickActionBtn, saveWheelDisabled && styles.quickActionBtnDisabled]}
+                        onPress={onSaveWheel}
+                        disabled={saveWheelDisabled}
                     >
-                        <MaterialCommunityIcons name="plus" size={18} color="#37da66" />
-                        <Text style={styles.quickActionText}>Add Option</Text>
+                        <MaterialCommunityIcons
+                            name="content-save-outline"
+                            size={18}
+                            color={saveWheelDisabled ? "#4f8f63" : "#37da66"}
+                        />
+                        <Text style={styles.quickActionText}>Save Wheel</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -268,8 +279,9 @@ export default function Controls({
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={styles.quickActionBtn}
+                        style={[styles.quickActionBtn, spinning && styles.quickActionBtnDisabled]}
                         onPress={shuffleSegments}
+                        disabled={spinning}
                     >
                         <MaterialCommunityIcons name="shuffle-variant" size={18} color="#9654ff" />
                         <Text style={styles.quickActionText}>Shuffle</Text>
@@ -346,7 +358,7 @@ export default function Controls({
                                 contentContainerStyle={[
                                     styles.itemsListContent,
                                     editingIndex !== null && {
-                                        paddingBottom: keyboardHeight + 100,
+                                        paddingBottom: keyboardHeight + 120,
                                     },
                                 ]}
                                 keyboardShouldPersistTaps="always"
@@ -420,7 +432,7 @@ export default function Controls({
                                 ))}
                             </ScrollView>
 
-                            {!addInputFocused && (
+                            {keyboardHeight === 0 && (
                                 <TouchableOpacity style={styles.doneButton} onPress={closeEditor}>
                                     <Text style={styles.doneButtonText}>Done</Text>
                                 </TouchableOpacity>
@@ -501,6 +513,9 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         gap: 6,
         paddingVertical: 8,
+    },
+    quickActionBtnDisabled: {
+        opacity: 0.45,
     },
     quickActionText: {
         color: "#f4f5ff",
@@ -587,7 +602,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     itemsListContent: {
-        paddingBottom: 8,
+        paddingBottom: 28,
     },
     itemRow: {
         flexDirection: "row",

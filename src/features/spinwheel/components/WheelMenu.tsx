@@ -14,9 +14,10 @@ type Props = {
 
     onClose: () => void;
     onReset: () => void;
-    onShuffle: () => void;
     onOpenPresets: () => void;
     onSavePreset: () => void;
+    onDeleteWheel: () => void;
+    deleteWheelDisabled?: boolean;
 };
 
 export default function WheelMenu({
@@ -25,9 +26,10 @@ export default function WheelMenu({
     menuAnim,
     onClose,
     onReset,
-    onShuffle,
     onOpenPresets,
     onSavePreset,
+    onDeleteWheel,
+    deleteWheelDisabled = false,
 }: Props) {
     if (!mounted) return null;
 
@@ -87,13 +89,6 @@ export default function WheelMenu({
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={{ paddingVertical: 10 }}
-                    onPress={onShuffle}
-                >
-                    <Text style={{ color: "white" }}>Shuffle Options</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
                     style={{ paddingVertical: 12 }}
                     onPress={onOpenPresets}
                 >
@@ -112,7 +107,17 @@ export default function WheelMenu({
                     onPress={onSavePreset}
                 >
                     <Text style={{ color: "#4CAF50" }}>
-                        Save Wheel
+                        Save As
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={{ paddingVertical: 10 }}
+                    onPress={onDeleteWheel}
+                    disabled={deleteWheelDisabled}
+                >
+                    <Text style={{ color: deleteWheelDisabled ? "#8f5a5a" : "#FF6B6B" }}>
+                        Delete Wheel
                     </Text>
                 </TouchableOpacity>
             </Animated.View>

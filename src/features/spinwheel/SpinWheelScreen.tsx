@@ -1,14 +1,17 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import {
+    Alert,
     Dimensions,
     KeyboardAvoidingView,
     Platform,
+    Pressable,
     StatusBar,
     StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -68,7 +71,7 @@ export default function SpinWheelScreen() {
 
     const { segments: presetSegments } = useLocalSearchParams();
     const activePresetId = useWheelStore((s) => s.activePresetId);
-    const { presets, addPreset, reload } = useWheelPresets();
+    const { presets, addPreset, updatePreset, deletePreset, reload } = useWheelPresets();
 
     const hasLoadedPreset = React.useRef(false);
 
@@ -98,6 +101,8 @@ export default function SpinWheelScreen() {
     const [showSaveModal, setShowSaveModal] = React.useState(false);
     const [showPresetPicker, setShowPresetPicker] = React.useState(false);
     const [presetName, setPresetName] = React.useState("");
+    const [renamingPresetId, setRenamingPresetId] = React.useState<string | null>(null);
+    const [renamingPresetValue, setRenamingPresetValue] = React.useState("");
 
     useFocusEffect(
         React.useCallback(() => {
@@ -110,7 +115,18 @@ export default function SpinWheelScreen() {
         return presets.find((preset) => preset.id === activePresetId)?.name ?? "My Wheel";
     }, [activePresetId, presets]);
 
-    const handleSave = () => {
+    const saveWheelDisabled = React.useMemo(() => {
+        if (!activePresetId) return false;
+        const activePreset = presets.find((preset) => preset.id === activePresetId);
+        if (!activePreset) return false;
+        if (activePreset.segments.length !== segments.length) return false;
+
+        return activePreset.segments.every(
+            (segment, index) => segment.label.trim() === segments[index]?.label.trim()
+        );
+    }, [activePresetId, presets, segments]);
+
+    const handleSave = async () => {
         if (!presetName.trim()) return;
 
         const preset: WheelPreset = {
@@ -120,11 +136,92 @@ export default function SpinWheelScreen() {
             createdAt: Date.now(),
         };
 
-        addPreset(preset);
+        await addPreset(preset);
+        loadPreset(preset);
 
         setPresetName("");
         setShowSaveModal(false);
     };
+
+    const openSaveWheelModal = React.useCallback(async () => {
+        setMenuVisible(false);
+
+        if (activePresetId) {
+            const activePreset = presets.find((preset) => preset.id === activePresetId);
+            if (activePreset) {
+                const updatedPreset: WheelPreset = {
+                    ...activePreset,
+                    segments,
+                };
+                await updatePreset(updatedPreset);
+                loadPreset(updatedPreset);
+                return;
+            }
+        }
+
+        setShowSaveModal(true);
+    }, [activePresetId, loadPreset, presets, segments, setMenuVisible, updatePreset]);
+
+    const openSaveAsModal = React.useCallback(() => {
+        setMenuVisible(false);
+        setPresetName("");
+        setShowSaveModal(true);
+    }, [setMenuVisible]);
+
+    const startRenamingPreset = React.useCallback((preset: WheelPreset) => {
+        setRenamingPresetId(preset.id);
+        setRenamingPresetValue(preset.name);
+    }, []);
+
+    const commitPresetRename = React.useCallback(async () => {
+        if (!renamingPresetId) return;
+
+        const nextName = renamingPresetValue.trim();
+        const targetPreset = presets.find((preset) => preset.id === renamingPresetId);
+
+        if (!targetPreset) {
+            setRenamingPresetId(null);
+            setRenamingPresetValue("");
+            return;
+        }
+
+        if (nextName.length > 0 && nextName !== targetPreset.name) {
+            await updatePreset({
+                ...targetPreset,
+                name: nextName,
+            });
+        }
+
+        setRenamingPresetId(null);
+        setRenamingPresetValue("");
+    }, [presets, renamingPresetId, renamingPresetValue, updatePreset]);
+
+    React.useEffect(() => {
+        if (showPresetPicker) return;
+        setRenamingPresetId(null);
+        setRenamingPresetValue("");
+    }, [showPresetPicker]);
+
+    const confirmDeleteWheel = React.useCallback(() => {
+        if (!activePresetId) return;
+
+        Alert.alert(
+            "Delete Wheel",
+            `Are you sure you want to delete "${activePresetName}" wheel?`,
+            [
+                { text: "No", style: "cancel" },
+                {
+                    text: "Yes",
+                    style: "destructive",
+                    onPress: async () => {
+                        await deletePreset(activePresetId);
+                        resetWheel();
+                        setMenuVisible(false);
+                    },
+                },
+            ]
+        );
+    }, [activePresetId, activePresetName, deletePreset, resetWheel, setMenuVisible]);
 
     return (
         <KeyboardAvoidingView style={styles.screen}
@@ -135,11 +232,57 @@ export default function SpinWheelScreen() {
             <SafeAreaView style={styles.safeArea} edges={["top"]}>
                 <TouchableOpacity
                     onPress={() => setShowPresetPicker(true)}
+                    hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
                     style={styles.titleRow}
                 >
                     <Text style={styles.titleText}>{activePresetName}</Text>
                     <MaterialCommunityIcons name="chevron-down" size={18} color="#a8abc7" style={styles.chevron} />
                 </TouchableOpacity>
+
+                {showPresetPicker && (
+                    <View style={styles.presetDropdownOverlay}>
+                        <Pressable
+                            style={StyleSheet.absoluteFill}
+                            onPress={() => setShowPresetPicker(false)}
+                        />
+                        <View style={styles.presetDropdown}>
+                            {presets.length === 0 ? (
+                                <Text style={styles.pickerEmptyText}>No saved wheels yet.</Text>
+                            ) : (
+                                presets.map((preset) => (
+                                    <TouchableOpacity
+                                        key={preset.id}
+                                        style={styles.pickerItem}
+                                        onPress={() => {
+                                            if (renamingPresetId === preset.id) return;
+                                            loadPreset(preset);
+                                            setShowPresetPicker(false);
+                                        }}
+                                        onLongPress={() => startRenamingPreset(preset)}
+                                        delayLongPress={260}
+                                    >
+                                        {renamingPresetId === preset.id ? (
+                                            <TextInput
+                                                autoFocus
+                                                value={renamingPresetValue}
+                                                onChangeText={setRenamingPresetValue}
+                                                onSubmitEditing={commitPresetRename}
+                                                onBlur={commitPresetRename}
+                                                returnKeyType="done"
+                                                style={styles.pickerItemInput}
+                                            />
+                                        ) : (
+                                            <Text style={styles.pickerItemText}>{preset.name}</Text>
+                                        )}
+                                        {preset.id === activePresetId && (
+                                            <MaterialCommunityIcons name="check" size={18} color="#4CAF50" />
+                                        )}
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </View>
+                    </View>
+                )}
 
                 <TouchableOpacity
                     onPress={() => setMenuVisible(true)}
@@ -176,6 +319,8 @@ export default function SpinWheelScreen() {
                     keyboardHeight={keyboardHeight}
                     result={result}
                     shuffleSegments={shuffleSegments}
+                    onSaveWheel={openSaveWheelModal}
+                    saveWheelDisabled={saveWheelDisabled}
                 />
             </SafeAreaView>
 
@@ -188,54 +333,11 @@ export default function SpinWheelScreen() {
                     resetWheel();
                     setMenuVisible(false);
                 }}
-                onShuffle={() => {
-                    shuffleSegments();
-                    setMenuVisible(false);
-                }}
                 onOpenPresets={() => router.push("/presets")}
-                onSavePreset={() => {
-                    setMenuVisible(false);
-                    setShowSaveModal(true);
-                }}
+                onSavePreset={openSaveAsModal}
+                onDeleteWheel={confirmDeleteWheel}
+                deleteWheelDisabled={!activePresetId}
             />
-
-            <AppModal
-                visible={showPresetPicker}
-                onClose={() => setShowPresetPicker(false)}
-            >
-                <Text style={styles.pickerTitle}>Choose a wheel</Text>
-                {presets.length === 0 ? (
-                    <Text style={styles.pickerEmptyText}>
-                        No saved wheels yet.
-                    </Text>
-                ) : (
-                    presets.map((preset) => (
-                        <TouchableOpacity
-                            key={preset.id}
-                            style={styles.pickerItem}
-                            onPress={() => {
-                                loadPreset(preset);
-                                setShowPresetPicker(false);
-                            }}
-                        >
-                            <Text style={styles.pickerItemText}>{preset.name}</Text>
-                            {preset.id === activePresetId && (
-                                <MaterialCommunityIcons name="check" size={18} color="#4CAF50" />
-                            )}
-                        </TouchableOpacity>
-                    ))
-                )}
-
-                <TouchableOpacity
-                    style={styles.openLibraryBtn}
-                    onPress={() => {
-                        setShowPresetPicker(false);
-                        router.push("/presets");
-                    }}
-                >
-                    <Text style={styles.openLibraryText}>Open saved wheels</Text>
-                </TouchableOpacity>
-            </AppModal>
 
             <AppModal
                 visible={showSaveModal}
@@ -290,11 +392,30 @@ const styles = StyleSheet.create({
         padding: 8,
     },
     titleRow: {
-        marginTop: 2,
+        marginTop: -10,
         alignSelf: "center",
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 10,
+        paddingVertical: 8,
         maxWidth: "75%",
+        zIndex: 30,
+    },
+    presetDropdownOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 35,
+    },
+    presetDropdown: {
+        marginTop: 52,
+        alignSelf: "center",
+        width: "80%",
+        maxHeight: 260,
+        backgroundColor: "#171a2f",
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#33395d",
+        padding: 10,
     },
     titleText: {
         color: "#f8f8ff",
@@ -305,15 +426,9 @@ const styles = StyleSheet.create({
     chevron: {
         marginLeft: 6,
     },
-    pickerTitle: {
-        color: "white",
-        fontSize: 20,
-        fontWeight: "700",
-        marginBottom: 12,
-    },
     pickerEmptyText: {
         color: "#9aa0b8",
-        marginBottom: 12,
+        paddingVertical: 8,
     },
     pickerItem: {
         borderWidth: 1,
@@ -330,13 +445,11 @@ const styles = StyleSheet.create({
         color: "white",
         fontSize: 16,
     },
-    openLibraryBtn: {
-        marginTop: 8,
-        alignSelf: "flex-end",
-        paddingVertical: 6,
-    },
-    openLibraryText: {
-        color: "#4CAF50",
-        fontWeight: "600",
+    pickerItemInput: {
+        flex: 1,
+        color: "white",
+        fontSize: 16,
+        paddingVertical: 0,
+        marginRight: 8,
     },
 });

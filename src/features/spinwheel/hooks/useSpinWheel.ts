@@ -224,11 +224,11 @@ const spin = () => {
         if (!text) return;
 
         setSegments([
-            ...segments,
             {
                 id: createId(),
                 label: text,
             },
+            ...segments,
         ]);
 
         dispatch({ type: "SET_INPUT", payload: "" });
