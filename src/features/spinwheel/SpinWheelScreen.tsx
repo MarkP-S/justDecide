@@ -54,6 +54,11 @@ export default function SpinWheelScreen() {
         segmentAngle,
         resetWheel,
         shuffleSegments,
+        activeSegments,
+        mutedCount,
+        isSegmentMuted,
+        toggleMutedSegment,
+        clearMutedSegments,
         menuVisible,
         setMenuVisible,
         menuMounted,
@@ -165,7 +170,7 @@ export default function SpinWheelScreen() {
                 </TouchableOpacity>
 
                 <WheelCanvas
-                    segments={segments}
+                    segments={activeSegments}
                     wheelSize={wheelSize}
                     radius={radius}
                     segmentAngle={segmentAngle}
@@ -195,6 +200,11 @@ export default function SpinWheelScreen() {
                     shuffleSegments={shuffleSegments}
                     onSaveWheel={openSaveWheelModal}
                     saveWheelDisabled={saveWheelDisabled}
+                    activeSegmentsCount={activeSegments.length}
+                    mutedCount={mutedCount}
+                    isSegmentMuted={isSegmentMuted}
+                    toggleMutedSegment={toggleMutedSegment}
+                    restoreMutedSegments={clearMutedSegments}
                 />
             </SafeAreaView>
 

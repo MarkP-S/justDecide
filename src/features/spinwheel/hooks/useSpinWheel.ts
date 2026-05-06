@@ -1,6 +1,6 @@
 import { useWheelStore } from "@/src/store/useWheelStore";
 import { createId } from "@/src/utils/createId";
-import { useEffect, useMemo, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Animated, Easing, Keyboard } from "react-native";
 import {
     calculateTotalRotation,
@@ -90,11 +90,19 @@ const initialState: State = {
 export default function useSpinWheel() {
     const [state, dispatch] = useReducer(reducer, initialState);
     const segments = useWheelStore((s) => s.segments);
+    const activePresetId = useWheelStore((s) => s.activePresetId);
+    const result = useWheelStore((s) => s.result);
     const setSegments = useWheelStore((s) => s.setSegments);
     const setResult = useWheelStore((s) => s.setResult);
+    const [mutedSegmentIds, setMutedSegmentIds] = useState<string[]>([]);
+    const activeSegments = useMemo(
+        () => segments.filter((segment) => !mutedSegmentIds.includes(segment.id)),
+        [mutedSegmentIds, segments]
+    );
+    const mutedCount = mutedSegmentIds.length;
     const segmentAngle = useMemo(
-        () => 360 / segments.length,
-        [segments.length]
+        () => (activeSegments.length > 0 ? 360 / activeSegments.length : 360),
+        [activeSegments.length]
     );
 
     const rotation = useRef(new Animated.Value(0)).current;
@@ -130,6 +138,25 @@ export default function useSpinWheel() {
             hide.remove();
         };
     }, []);
+
+    // Clear temporary cross-outs when switching/loading presets.
+    useEffect(() => {
+        setMutedSegmentIds([]);
+    }, [activePresetId]);
+
+    // Keep muted ids in sync when segments are edited or removed.
+    useEffect(() => {
+        setMutedSegmentIds((prev) =>
+            prev.filter((id) => segments.some((segment) => segment.id === id))
+        );
+    }, [segments]);
+
+    // If the displayed result is no longer active, clear it.
+    useEffect(() => {
+        if (!result) return;
+        if (activeSegments.some((segment) => segment.label === result)) return;
+        setResult(null);
+    }, [activeSegments, result, setResult]);
 
     /* -------------------------
        MENU ANIMATION
@@ -178,7 +205,7 @@ export default function useSpinWheel() {
 
     // Starts a continuous "hold to spin" cruise and decelerates on release.
     const startSpinCruise = () => {
-        if (state.spinning || segments.length === 0) return;
+        if (state.spinning || activeSegments.length === 0) return;
 
         dispatch({ type: "SET_SPINNING", payload: true });
         setResult(null);
@@ -219,7 +246,7 @@ export default function useSpinWheel() {
                         cruiseActiveRef.current = false;
                         holdAnimRef.current = null;
 
-                        const segmentsAtStart = [...segments];
+                        const segmentsAtStart = [...activeSegments];
                         const segmentAngleAtStart = segmentAngle;
                         if (segmentsAtStart.length === 0) {
                             dispatch({ type: "SET_SPINNING", payload: false });
@@ -259,9 +286,9 @@ export default function useSpinWheel() {
     };
 
     const spin = () => {
-        if (state.spinning || segments.length === 0) return;
+        if (state.spinning || activeSegments.length === 0) return;
 
-        const segmentsAtStart = [...segments];
+        const segmentsAtStart = [...activeSegments];
         const segmentAngleAtStart = segmentAngle;
 
         dispatch({ type: "SET_SPINNING", payload: true });
@@ -336,6 +363,16 @@ export default function useSpinWheel() {
 
         setSegments(segments.filter((_, index) => index !== i));
     },
+
+    activeSegments,
+    mutedSegmentIds,
+    mutedCount,
+    isSegmentMuted: (id: string) => mutedSegmentIds.includes(id),
+    toggleMutedSegment: (id: string) =>
+        setMutedSegmentIds((prev) =>
+            prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
+        ),
+    clearMutedSegments: () => setMutedSegmentIds([]),
 
     saveEdit: () => {
         if (state.editingIndex === null) return;

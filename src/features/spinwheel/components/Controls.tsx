@@ -48,6 +48,11 @@ type Props = {
     shuffleSegments: () => void;
     onSaveWheel: () => void;
     saveWheelDisabled: boolean;
+    activeSegmentsCount: number;
+    mutedCount: number;
+    isSegmentMuted: (id: string) => boolean;
+    toggleMutedSegment: (id: string) => void;
+    restoreMutedSegments: () => void;
 };
 
 export default function Controls({
@@ -70,6 +75,11 @@ export default function Controls({
     shuffleSegments,
     onSaveWheel,
     saveWheelDisabled,
+    activeSegmentsCount,
+    mutedCount,
+    isSegmentMuted,
+    toggleMutedSegment,
+    restoreMutedSegments,
 }: Props) {
     const [editorVisible, setEditorVisible] = React.useState(false);
     const [addInputFocused, setAddInputFocused] = React.useState(false);
@@ -261,11 +271,20 @@ export default function Controls({
                 <TouchableOpacity
                     onPressIn={handleSpinPressIn}
                     onPressOut={handleSpinPressOut}
-                    style={[styles.spinButton, spinning && styles.spinButtonDisabled]}
+                    style={[
+                        styles.spinButton,
+                        (spinning || activeSegmentsCount === 0) && styles.spinButtonDisabled,
+                    ]}
+                    disabled={activeSegmentsCount === 0}
                 >
                     <MaterialCommunityIcons name="target" size={28} color="#eafff0" />
                     <Text style={styles.spinButtonText}>{spinning ? "SPINNING..." : "SPIN"}</Text>
                 </TouchableOpacity>
+                {activeSegmentsCount === 0 && (
+                    <Text style={styles.spinDisabledText}>
+                        Enable at least one option to spin.
+                    </Text>
+                )}
 
                 <View style={styles.quickActions}>
                     <TouchableOpacity
@@ -331,6 +350,16 @@ export default function Controls({
                                 <View style={styles.sheetHeader}>
                                     <Text style={styles.sheetTitle}>Edit Options</Text>
                                 </View>
+                                {mutedCount > 0 && (
+                                    <View style={styles.mutedInfoRow}>
+                                        <Text style={styles.mutedInfoText}>
+                                            {mutedCount} hidden
+                                        </Text>
+                                        <TouchableOpacity onPress={restoreMutedSegments}>
+                                            <Text style={styles.restoreAllText}>Restore all</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
 
                             <View style={styles.addInputRow}>
                                 <TouchableOpacity
@@ -426,9 +455,38 @@ export default function Controls({
                                                 }}
                                                 style={styles.itemLabelPressable}
                                             >
-                                                <Text style={styles.itemText}>{item.label}</Text>
+                                                <Text
+                                                    style={[
+                                                        styles.itemText,
+                                                        isSegmentMuted(item.id) && styles.itemTextMuted,
+                                                    ]}
+                                                >
+                                                    {item.label}
+                                                </Text>
                                             </Pressable>
                                         )}
+
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                saveEdit();
+                                                toggleMutedSegment(item.id);
+                                            }}
+                                            style={styles.iconBtn}
+                                        >
+                                            <MaterialCommunityIcons
+                                                name={
+                                                    isSegmentMuted(item.id)
+                                                        ? "eye-off-outline"
+                                                        : "eye-outline"
+                                                }
+                                                size={20}
+                                                color={
+                                                    isSegmentMuted(item.id)
+                                                        ? "#e19cff"
+                                                        : "#b6bcda"
+                                                }
+                                            />
+                                        </TouchableOpacity>
 
                                         <TouchableOpacity
                                             onPress={() => {
@@ -510,6 +568,13 @@ const styles = StyleSheet.create({
         fontWeight: "800",
         letterSpacing: 1.5,
     },
+    spinDisabledText: {
+        color: "#8f95b1",
+        fontSize: 13,
+        textAlign: "center",
+        marginTop: -8,
+        marginBottom: 12,
+    },
     quickActions: {
         flexDirection: "row",
         borderRadius: 18,
@@ -581,6 +646,21 @@ const styles = StyleSheet.create({
         justifyContent: "flex-start",
         marginBottom: 14,
     },
+    mutedInfoRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 12,
+    },
+    mutedInfoText: {
+        color: "#b7bdd7",
+        fontSize: 14,
+    },
+    restoreAllText: {
+        color: "#8dc4ff",
+        fontSize: 14,
+        fontWeight: "600",
+    },
     sheetTitle: {
         color: "white",
         fontWeight: "700",
@@ -635,6 +715,10 @@ const styles = StyleSheet.create({
         color: "white",
         fontSize: 20,
         fontWeight: "500",
+    },
+    itemTextMuted: {
+        opacity: 0.45,
+        textDecorationLine: "line-through",
     },
     itemInput: {
         flex: 1,
