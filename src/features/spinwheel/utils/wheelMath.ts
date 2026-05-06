@@ -1,65 +1,3 @@
-export function createSegmentPath(
-    index: number,
-    segmentsLength: number,
-    radius: number
-) {
-    const segmentAngle = 360 / segmentsLength;
-
-    const startAngle = (index * segmentAngle * Math.PI) / 180;
-    const endAngle = ((index + 1) * segmentAngle * Math.PI) / 180;
-
-    const x1 = radius + radius * Math.cos(startAngle);
-    const y1 = radius + radius * Math.sin(startAngle);
-
-    const x2 = radius + radius * Math.cos(endAngle);
-    const y2 = radius + radius * Math.sin(endAngle);
-
-    return `M${radius},${radius} L${x1},${y1} A${radius},${radius} 0 0 1 ${x2},${y2} Z`;
-}
-//Deprecated:
-// export function calculateSpinResult(
-//     segmentCount: number,
-//     segmentAngle: number
-// ) {
-//     const winningIndex = Math.floor(Math.random() * segmentCount);
-
-//     const padding = segmentAngle * 0.2;
-
-//     const isSingle = segmentCount === 1;
-
-//     const randomOffset = isSingle
-//         ? 0 // keep it centered
-//         : padding + Math.random() * (segmentAngle - 2 * padding);
-
-//     const fullRotations = 360 * 6;
-
-//     const targetAngle =
-//         360 - (winningIndex * segmentAngle + segmentAngle / 2);
-
-//     return {
-//         winningIndex,
-//         randomOffset,
-//         fullRotations,
-//         targetAngle,
-//     };
-// }
-
-// export function calculateTotalRotation(params: {
-//     currentRotation: number;
-//     winningIndex: number;
-//     segmentAngle: number;
-//     segmentsLength: number;
-// }) {
-//     const { currentRotation, winningIndex, segmentAngle } = params;
-
-//     const fullRotations = 360 * 6;
-
-//     const targetAngle =
-//         360 - (winningIndex * segmentAngle + segmentAngle / 2);
-
-//     return currentRotation + fullRotations + targetAngle;
-// }
-
 export const getSegmentColor = (index: number, total: number) => {
     if (total === 1) {
         return "#7547d1";
@@ -83,7 +21,7 @@ export const createPath = (
     radius: number,
     totalSegments: number
 ) => {
-    // HANDLE SINGLE SEGMENT FIRST
+    // A full circle is required when there is only one segment.
     if (totalSegments === 1) {
         return `
             M ${radius} ${radius}
@@ -93,7 +31,6 @@ export const createPath = (
         `;
     }
 
-    // normal multi-segment logic
     const angle = (2 * Math.PI) / totalSegments;
 
     const startAngle = index * angle;

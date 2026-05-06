@@ -57,10 +57,6 @@ export default function PresetsScreen() {
         setNewItem("");
     };
 
-    const removeNewItem = (index: number) => {
-        setNewSegments((prev) => prev.filter((_, i) => i !== index));
-    };
-
     const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
 
     const startEditPreset = (preset: WheelPreset) => {

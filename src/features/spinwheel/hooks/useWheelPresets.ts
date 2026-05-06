@@ -41,9 +41,7 @@ const normalizeSegments = (segments: unknown): Segment[] => {
 export default function useWheelPresets() {
     const [presets, setPresets] = useState<WheelPreset[]>([]);
 
-    /* -------------------------
-       LOAD PRESETS
-    --------------------------*/
+    // Hydrates presets from local storage.
     const loadPresets = async () => {
         try {
             const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -55,14 +53,12 @@ export default function useWheelPresets() {
                 }));
                 setPresets(normalized);
             }
-        } catch (e) {
+        } catch {
             console.warn("Failed to load presets");
         }
     };
 
-    /* -------------------------
-       SAVE PRESETS
-    --------------------------*/
+    // Persists normalized presets and updates local state.
     const savePresets = async (data: WheelPreset[]) => {
         try {
             const normalized = data.map((preset) => ({
@@ -72,22 +68,16 @@ export default function useWheelPresets() {
 
             await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
             setPresets(normalized);
-        } catch (e) {
+        } catch {
             console.warn("Failed to save presets");
         }
     };
 
-    /* -------------------------
-       ADD PRESET
-    --------------------------*/
     const addPreset = async (preset: WheelPreset) => {
         const updated = [preset, ...presets];
         await savePresets(updated);
     };
 
-    /* -------------------------
-       UPDATE PRESET ✅
-    --------------------------*/
     const updatePreset = async (updatedPreset: WheelPreset) => {
         const updated = presets.map((p) =>
             p.id === updatedPreset.id ? updatedPreset : p
@@ -95,17 +85,12 @@ export default function useWheelPresets() {
 
         await savePresets(updated);
     };
-    /* -------------------------
-       DELETE PRESET ✅
-    --------------------------*/
+
     const deletePreset = async (id: string) => {
         const updated = presets.filter((p) => p.id !== id);
         await savePresets(updated);
     };
 
-    /* -------------------------
-       INIT LOAD
-    --------------------------*/
     useEffect(() => {
         loadPresets();
     }, []);
@@ -113,8 +98,8 @@ export default function useWheelPresets() {
     return {
         presets,
         addPreset,
-        updatePreset,   // ✅ exposed
-        deletePreset,   // ✅ exposed
+        updatePreset,
+        deletePreset,
         reload: loadPresets,
     };
 }

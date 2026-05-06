@@ -25,6 +25,7 @@ import Animated, {
     withSpring,
     withTiming,
 } from "react-native-reanimated";
+import useSpinButtonInteraction from "../hooks/useSpinButtonInteraction";
 import { Segment } from "../types";
 
 type Props = {
@@ -85,8 +86,6 @@ export default function Controls({
     const scrollYRef = React.useRef(0);
     const editRowRef = React.useRef<View>(null);
     const rowOffsetsRef = React.useRef<Record<number, number>>({});
-    const holdTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-    const holdActivatedRef = React.useRef(false);
 
     const scrollActiveRowAboveKeyboard = React.useCallback((kbHeight: number) => {
         if (kbHeight <= 0 || editingIndex === null) return;
@@ -238,33 +237,11 @@ export default function Controls({
         addSegment(input);
     }, [addSegment, input]);
 
-    const handleSpinPressIn = React.useCallback(() => {
-        holdActivatedRef.current = false;
-        if (holdTimerRef.current) {
-            clearTimeout(holdTimerRef.current);
-            holdTimerRef.current = null;
-        }
-        holdTimerRef.current = setTimeout(() => {
-            holdTimerRef.current = null;
-            holdActivatedRef.current = true;
-            startSpinCruise();
-        }, 180);
-    }, [startSpinCruise]);
-
-    const handleSpinPressOut = React.useCallback(() => {
-        if (holdTimerRef.current) {
-            clearTimeout(holdTimerRef.current);
-            holdTimerRef.current = null;
-        }
-
-        if (holdActivatedRef.current) {
-            holdActivatedRef.current = false;
-            releaseSpinCruise();
-            return;
-        }
-
-        spin();
-    }, [releaseSpinCruise, spin]);
+    const { handleSpinPressIn, handleSpinPressOut } = useSpinButtonInteraction({
+        spin,
+        startSpinCruise,
+        releaseSpinCruise,
+    });
 
     return (
         <>

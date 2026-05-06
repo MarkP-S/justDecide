@@ -13,9 +13,7 @@ import {
    STATE TYPE
 --------------------------*/
 type State = {
-    //segments: Segment[]
     input: string;
-    //result: string | null;
     spinning: boolean;
 
     editingIndex: number | null;
@@ -32,17 +30,10 @@ type State = {
 --------------------------*/
 type Action =
     | { type: "SET_INPUT"; payload: string }
-    //| { type: "ADD_SEGMENT" }
-    //| { type: "REMOVE_SEGMENT"; payload: number }
-    //| { type: "SET_SEGMENTS"; payload: Segment[] }
-    //| { type: "SET_RESULT"; payload: string | null }
     | { type: "SET_SPINNING"; payload: boolean }
     | { type: "SET_EDIT_INDEX"; payload: number | null }
     | { type: "SET_EDIT_VALUE"; payload: string }
-    //| { type: "SAVE_EDIT" }
     | { type: "SET_KEYBOARD"; payload: number }
-    //| { type: "RESET_WHEEL" }
-    //| { type: "SHUFFLE" }
     | { type: "SET_MENU_VISIBLE"; payload: boolean }
     | { type: "SET_MENU_MOUNTED"; payload: boolean };
 
@@ -81,9 +72,7 @@ function reducer(state: State, action: Action): State {
    INITIAL STATE
 --------------------------*/
 const initialState: State = {
-    //segments: [{ id: "1", label: "Add options" }],
     input: "",
-    //result: null,
     spinning: false,
 
     editingIndex: null,
@@ -118,6 +107,7 @@ export default function useSpinWheel() {
     const CRUISE_DEG_PER_SEC = 1280;
     const RELEASE_BUFFER_MS = 320;
 
+    // Keeps the wheel's resting angle inside [0..360).
     const normalizeRestingAngle = (angle: number) => {
         const mod = angle % 360;
         return mod < 0 ? mod + 360 : mod;
@@ -164,6 +154,7 @@ export default function useSpinWheel() {
     /* -------------------------
        SPIN LOGIC (USES PURE UTILS)
     --------------------------*/
+    // Finalizes a spin using the exact segment snapshot captured at spin start.
     const finalizeSpin = (finalAngle: number, segmentsAtStart: typeof segments, segmentAngleAtStart: number) => {
         const restingAngle = normalizeRestingAngle(finalAngle);
         currentRotation.current = restingAngle;
@@ -181,11 +172,11 @@ export default function useSpinWheel() {
 
     const releaseSpinCruise = () => {
         if (!state.spinning) return;
-        // Pre-scheduled continuous driver: do not stop immediately on release.
-        // We mark intent and transition at the next cruise-leg boundary.
+        // Transition to deceleration on the next cruise-leg boundary.
         releaseRequestedRef.current = true;
     };
 
+    // Starts a continuous "hold to spin" cruise and decelerates on release.
     const startSpinCruise = () => {
         if (state.spinning || segments.length === 0) return;
 
@@ -203,8 +194,7 @@ export default function useSpinWheel() {
             currentRotation.current = fromRotation;
             rotation.setValue(fromRotation);
 
-            // Larger legs reduce handoff frequency during hold, avoiding periodic flicker.
-            // We still transition on leg boundary to keep release hitch-free.
+            // Larger legs reduce handoff frequency during hold.
             const legDegrees = 360;
             const legDurationMs = Math.round((legDegrees / CRUISE_DEG_PER_SEC) * 1000);
 
@@ -311,7 +301,6 @@ export default function useSpinWheel() {
     return {
     ...state,
 
-    // 👇 from Zustand
     segments,
 
     rotation,
@@ -322,15 +311,11 @@ export default function useSpinWheel() {
     startSpinCruise,
     releaseSpinCruise,
 
-    // -------------------------
-    // INPUT
-    // -------------------------
+    // Input draft state
     setInput: (v: string) =>
         dispatch({ type: "SET_INPUT", payload: v }),
 
-    // -------------------------
-    // SEGMENTS (ZUSTAND)
-    // -------------------------
+    // Segment list actions
     addSegment: (draftLabel?: string) => {
         const text = (draftLabel !== undefined ? draftLabel : state.input).trim();
         if (!text) return;
@@ -381,9 +366,7 @@ export default function useSpinWheel() {
         setSegments([...segments].sort(() => Math.random() - 0.5));
     },
 
-    // -------------------------
-    // UI STATE (REDUCER)
-    // -------------------------
+    // UI state actions
     setMenuVisible: (v: boolean) =>
         dispatch({ type: "SET_MENU_VISIBLE", payload: v }),
 

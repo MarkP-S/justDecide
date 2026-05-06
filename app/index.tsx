@@ -38,15 +38,4 @@ const styles = StyleSheet.create({
         opacity: 0.8,
         marginBottom: 40,
     },
-    button: {
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderWidth: 1,
-        borderColor: "white",
-        borderRadius: 8,
-    },
-    buttonText: {
-        color: "white",
-        fontSize: 16,
-    },
 });

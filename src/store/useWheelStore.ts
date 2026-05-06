@@ -41,14 +41,14 @@ const normalizeSegments = (segments: unknown): Segment[] => {
 };
 
 type WheelState = {
-    // 🎡 ACTIVE WHEEL (this persists across screens)
+    // Active wheel state shared across screens.
     segments: Segment[];
     result: string | null;
 
-    // 🎯 current selected preset (optional but useful)
+    // Currently selected preset.
     activePresetId: string | null;
 
-    // 🎛 actions
+    // Store actions.
     setSegments: (segments: Segment[]) => void;
     setResult: (result: string | null) => void;
 
