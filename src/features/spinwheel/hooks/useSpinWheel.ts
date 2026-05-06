@@ -5,7 +5,7 @@ import { Animated, Easing, Keyboard } from "react-native";
 import {
     calculateTotalRotation,
     getWinningIndex,
-    normalizeResultIndex
+    normalizeResultIndex,
 } from "../utils/spinLogic";
 
 
@@ -103,19 +103,20 @@ export default function useSpinWheel() {
     const segments = useWheelStore((s) => s.segments);
     const setSegments = useWheelStore((s) => s.setSegments);
     const setResult = useWheelStore((s) => s.setResult);
-
-    const rotation = useRef(new Animated.Value(0)).current;
-    const currentRotation = useRef(0);
-    const menuAnim = useRef(new Animated.Value(0)).current;
-    const previousRotation = useRef(0);
-    const cruiseActiveRef = useRef(false);
-    const cruiseGenerationRef = useRef(0);
-    const CRUISE_DEG_PER_SEC = 1020;
-
     const segmentAngle = useMemo(
         () => 360 / segments.length,
         [segments.length]
     );
+
+    const rotation = useRef(new Animated.Value(0)).current;
+    const currentRotation = useRef(0);
+    const menuAnim = useRef(new Animated.Value(0)).current;
+    const holdAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+    const cruiseActiveRef = useRef(false);
+    const releaseRequestedRef = useRef(false);
+    const cruiseGenerationRef = useRef(0);
+    const CRUISE_DEG_PER_SEC = 1280;
+    const RELEASE_BUFFER_MS = 320;
 
     const normalizeRestingAngle = (angle: number) => {
         const mod = angle % 360;
@@ -158,148 +159,154 @@ export default function useSpinWheel() {
                 dispatch({ type: "SET_MENU_MOUNTED", payload: false });
             }
         });
-    }, [state.menuVisible]);
+    }, [menuAnim, state.menuVisible]);
 
     /* -------------------------
        SPIN LOGIC (USES PURE UTILS)
     --------------------------*/
-const finishSpinAfterRelease = () => {
-    if (segments.length === 0) return;
-
-    const winningIndex = getWinningIndex(segments.length);
-    const totalRotation = calculateTotalRotation({
-        currentRotation: currentRotation.current,
-        winningIndex,
-        segmentAngle,
-        segmentsLength: segments.length,
-    }) - 360 * 4;
-
-    const finalizeResult = () => {
-        const restingAngle = normalizeRestingAngle(currentRotation.current);
-        previousRotation.current = restingAngle;
+    const finalizeSpin = (finalAngle: number, segmentsAtStart: typeof segments, segmentAngleAtStart: number) => {
+        const restingAngle = normalizeRestingAngle(finalAngle);
         currentRotation.current = restingAngle;
         rotation.setValue(restingAngle);
 
         const index = normalizeResultIndex({
-            currentRotation: currentRotation.current,
-            segmentAngle,
-            segmentsLength: segments.length,
+            currentRotation: restingAngle,
+            segmentAngle: segmentAngleAtStart,
+            segmentsLength: segmentsAtStart.length,
         });
 
-        setResult(segments[index].label);
+        setResult(segmentsAtStart[index].label);
         dispatch({ type: "SET_SPINNING", payload: false });
     };
 
-    previousRotation.current = currentRotation.current;
-    currentRotation.current = totalRotation;
-    rotation.setValue(previousRotation.current);
+    const releaseSpinCruise = () => {
+        if (!state.spinning) return;
+        // Pre-scheduled continuous driver: do not stop immediately on release.
+        // We mark intent and transition at the next cruise-leg boundary.
+        releaseRequestedRef.current = true;
+    };
 
-    Animated.timing(rotation, {
-        toValue: currentRotation.current,
-        duration: 2350,
-        // starts nearly linear, then eases out smoothly
-        easing: Easing.bezier(0.2, 0.2, 0.25, 1),
-        useNativeDriver: true,
-    }).start(finalizeResult);
-};
+    const startSpinCruise = () => {
+        if (state.spinning || segments.length === 0) return;
 
-const startSpinCruise = () => {
-    if (state.spinning || segments.length === 0) return;
+        dispatch({ type: "SET_SPINNING", payload: true });
+        setResult(null);
+        holdAnimRef.current?.stop();
+        holdAnimRef.current = null;
+        cruiseActiveRef.current = true;
+        releaseRequestedRef.current = false;
+        cruiseGenerationRef.current += 1;
+        const runGeneration = cruiseGenerationRef.current;
 
-    dispatch({ type: "SET_SPINNING", payload: true });
-    setResult(null);
-    cruiseActiveRef.current = true;
-    cruiseGenerationRef.current += 1;
-    const runGeneration = cruiseGenerationRef.current;
+        rotation.stopAnimation((value) => {
+            const fromRotation = Number.isFinite(value) ? value : currentRotation.current;
+            currentRotation.current = fromRotation;
+            rotation.setValue(fromRotation);
 
-    const runCruiseLeg = (fromRotation: number) => {
-        if (!cruiseActiveRef.current || runGeneration !== cruiseGenerationRef.current) return;
+            // Larger legs reduce handoff frequency during hold, avoiding periodic flicker.
+            // We still transition on leg boundary to keep release hitch-free.
+            const legDegrees = 360;
+            const legDurationMs = Math.round((legDegrees / CRUISE_DEG_PER_SEC) * 1000);
 
-        const CRUISE_LEG_DEGREES = 360 * 24;
-        const legDurationMs = Math.round((CRUISE_LEG_DEGREES / CRUISE_DEG_PER_SEC) * 1000);
+            const runCruiseLeg = (legFrom: number) => {
+                if (!cruiseActiveRef.current || runGeneration !== cruiseGenerationRef.current) return;
+                const legTo = legFrom + legDegrees;
+                currentRotation.current = legTo;
 
-        previousRotation.current = fromRotation;
-        currentRotation.current = fromRotation + CRUISE_LEG_DEGREES;
-        rotation.setValue(previousRotation.current);
+                const leg = Animated.timing(rotation, {
+                    toValue: legTo,
+                    duration: legDurationMs,
+                    easing: Easing.linear,
+                    useNativeDriver: true,
+                });
 
-        Animated.timing(rotation, {
-            toValue: currentRotation.current,
-            duration: legDurationMs,
-            easing: Easing.linear,
-            useNativeDriver: true,
-        }).start(({ finished }) => {
-            if (!finished || runGeneration !== cruiseGenerationRef.current) return;
-            if (!cruiseActiveRef.current) return;
-            runCruiseLeg(currentRotation.current);
+                holdAnimRef.current = leg;
+                leg.start(({ finished }) => {
+                    if (!finished) return;
+                    if (runGeneration !== cruiseGenerationRef.current) return;
+                    if (releaseRequestedRef.current) {
+                        releaseRequestedRef.current = false;
+                        cruiseActiveRef.current = false;
+                        holdAnimRef.current = null;
+
+                        const segmentsAtStart = [...segments];
+                        const segmentAngleAtStart = segmentAngle;
+                        if (segmentsAtStart.length === 0) {
+                            dispatch({ type: "SET_SPINNING", payload: false });
+                            return;
+                        }
+
+                        const fromRotation = legTo;
+                        const bufferDegrees = (CRUISE_DEG_PER_SEC * RELEASE_BUFFER_MS) / 1000;
+                        const virtualReleaseRotation = fromRotation + bufferDegrees;
+                        const winningIndex = getWinningIndex(segmentsAtStart.length);
+                        const totalRotation = calculateTotalRotation({
+                            currentRotation: virtualReleaseRotation,
+                            winningIndex,
+                            segmentAngle: segmentAngleAtStart,
+                            segmentsLength: segmentsAtStart.length,
+                        }) - 360 * 4;
+
+                        const transitionDurationMs = RELEASE_BUFFER_MS + 2350;
+                        currentRotation.current = totalRotation;
+                        Animated.timing(rotation, {
+                            toValue: totalRotation,
+                            duration: transitionDurationMs,
+                            easing: Easing.bezier(0.08, 0.08, 0.25, 1),
+                            useNativeDriver: true,
+                        }).start(({ finished: decelFinished }) => {
+                            if (!decelFinished) return;
+                            finalizeSpin(totalRotation, segmentsAtStart, segmentAngleAtStart);
+                        });
+                        return;
+                    }
+                    runCruiseLeg(legTo);
+                });
+            };
+
+            runCruiseLeg(fromRotation);
         });
     };
 
-    rotation.stopAnimation((value) => {
-        const normalizedValue = Number.isFinite(value) ? value : currentRotation.current;
-        const startValue = Math.max(previousRotation.current, normalizedValue);
-        runCruiseLeg(startValue);
-    });
-};
+    const spin = () => {
+        if (state.spinning || segments.length === 0) return;
 
-const releaseSpinCruise = () => {
-    if (!state.spinning) return;
-    cruiseActiveRef.current = false;
+        const segmentsAtStart = [...segments];
+        const segmentAngleAtStart = segmentAngle;
 
-    rotation.stopAnimation((value) => {
-        const normalizedValue = Number.isFinite(value) ? value : currentRotation.current;
-        const releaseBase = normalizedValue;
-        currentRotation.current = releaseBase;
-        previousRotation.current = releaseBase;
-        rotation.setValue(releaseBase);
-        finishSpinAfterRelease();
-    });
-};
+        dispatch({ type: "SET_SPINNING", payload: true });
+        setResult(null);
+        cruiseActiveRef.current = false;
+        releaseRequestedRef.current = false;
+        cruiseGenerationRef.current += 1;
+        holdAnimRef.current?.stop();
+        holdAnimRef.current = null;
 
-const spin = () => {
-    if (state.spinning || segments.length === 0) return;
+        rotation.stopAnimation((value) => {
+            const fromRotation = Number.isFinite(value) ? value : currentRotation.current;
+            currentRotation.current = fromRotation;
+            rotation.setValue(fromRotation);
 
-    dispatch({ type: "SET_SPINNING", payload: true });
-    setResult(null);
-    cruiseActiveRef.current = false;
-    cruiseGenerationRef.current += 1;
+            const winningIndex = getWinningIndex(segmentsAtStart.length);
+            const totalRotation = calculateTotalRotation({
+                currentRotation: fromRotation,
+                winningIndex,
+                segmentAngle: segmentAngleAtStart,
+                segmentsLength: segmentsAtStart.length,
+            });
 
-    const winningIndex = getWinningIndex(segments.length);
-    const totalRotation = calculateTotalRotation({
-        currentRotation: currentRotation.current,
-        winningIndex,
-        segmentAngle,
-        segmentsLength: segments.length,
-    });
-
-    previousRotation.current = currentRotation.current;
-    currentRotation.current = totalRotation;
-    rotation.setValue(previousRotation.current);
-
-    Animated.timing(rotation, {
-        toValue: currentRotation.current,
-        duration: 4000,
-        easing: Easing.bezier(0.33, 1, 0.68, 1),
-        useNativeDriver: true,
-    }).start(() => {
-        // Freeze the wheel at its exact final angle before UI state updates.
-        previousRotation.current = currentRotation.current;
-        rotation.setValue(currentRotation.current);
-
-        const restingAngle = normalizeRestingAngle(currentRotation.current);
-        previousRotation.current = restingAngle;
-        currentRotation.current = restingAngle;
-        rotation.setValue(restingAngle);
-
-        const index = normalizeResultIndex({
-            currentRotation: currentRotation.current,
-            segmentAngle,
-            segmentsLength: segments.length,
+            currentRotation.current = totalRotation;
+            Animated.timing(rotation, {
+                toValue: totalRotation,
+                duration: 4000,
+                easing: Easing.bezier(0.33, 1, 0.68, 1),
+                useNativeDriver: true,
+            }).start(({ finished }) => {
+                if (!finished) return;
+                finalizeSpin(totalRotation, segmentsAtStart, segmentAngleAtStart);
+            });
         });
-
-        setResult(segments[index].label);
-        dispatch({ type: "SET_SPINNING", payload: false });
-    });
-};
+    };
 
     return {
     ...state,
@@ -308,10 +315,8 @@ const spin = () => {
     segments,
 
     rotation,
-    currentRotation,
     menuAnim,
     segmentAngle,
-    previousRotation,
 
     spin,
     startSpinCruise,

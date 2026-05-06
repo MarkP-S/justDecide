@@ -40,7 +40,6 @@ export default function SpinWheelScreen() {
     const router = useRouter();
     const {
         rotation,
-        currentRotation,
         //segments,
         //result,
         spinning,
