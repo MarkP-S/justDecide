@@ -213,9 +213,12 @@ export default function SpinWheelScreen() {
                 mounted={menuMounted}
                 menuAnim={menuAnim}
                 onClose={() => setMenuVisible(false)}
-                onReset={() => {
-                    resetWheel();
+                onCreateNewWheel={() => {
                     setMenuVisible(false);
+                    router.push({
+                        pathname: "/presets",
+                        params: { createNew: "1" },
+                    });
                 }}
                 onOpenPresets={() => router.push("/presets")}
                 onSavePreset={openSaveAsModal}

@@ -13,7 +13,7 @@ type Props = {
     menuAnim: Animated.Value;
 
     onClose: () => void;
-    onReset: () => void;
+    onCreateNewWheel: () => void;
     onOpenPresets: () => void;
     onSavePreset: () => void;
     onDeleteWheel: () => void;
@@ -25,7 +25,7 @@ export default function WheelMenu({
     mounted,
     menuAnim,
     onClose,
-    onReset,
+    onCreateNewWheel,
     onOpenPresets,
     onSavePreset,
     onDeleteWheel,
@@ -73,26 +73,19 @@ export default function WheelMenu({
                     opacity: menuAnim,
                 }}
             >
-                {/* CLOSE */}
-                <TouchableOpacity onPress={onClose}>
-                    <Text style={{ color: "#aaa", marginBottom: 10 }}>
-                        Close
-                    </Text>
-                </TouchableOpacity>
-
                 {/* MENU ITEMS */}
                 <TouchableOpacity
                     style={{ paddingVertical: 10 }}
-                    onPress={onReset}
+                    onPress={onCreateNewWheel}
                 >
-                    <Text style={{ color: "white" }}>Reset Wheel</Text>
+                    <Text style={{ color: "white" }}>New Wheel</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     style={{ paddingVertical: 12 }}
                     onPress={onOpenPresets}
                 >
-                    <Text style={{ color: "white" }}>Saved Wheels</Text>
+                    <Text style={{ color: "white" }}>Edit Wheels</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={{ paddingVertical: 10 }}>

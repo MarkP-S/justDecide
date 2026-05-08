@@ -1,18 +1,21 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
+    Dimensions,
     FlatList,
     Keyboard,
     KeyboardAvoidingView,
+    Modal,
     Platform,
+    ScrollView,
     StatusBar,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
-    View,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -23,6 +26,8 @@ import useWheelPresets from "./hooks/useWheelPresets";
 export default function PresetsScreen() {
     const { presets, updatePreset, deletePreset, addPreset } = useWheelPresets();
     const router = useRouter();
+    const { createNew } = useLocalSearchParams<{ createNew?: string }>();
+    const autoOpenedFromParamRef = useRef(false);
 
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -30,11 +35,50 @@ export default function PresetsScreen() {
     const [newName, setNewName] = useState("");
     const [newItem, setNewItem] = useState("");
     const [newSegments, setNewSegments] = useState<Segment[]>([]);
+    const [sheetKeyboardHeight, setSheetKeyboardHeight] = useState(0);
 
     const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
     const [editingItemValue, setEditingItemValue] = useState("");
 
     const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+    const windowHeight = Dimensions.get("window").height;
+    const baseSheetHeight = Math.round(windowHeight * 0.7);
+    const SHEET_TOP_MARGIN = 24;
+    const baseBottomOffset = 64;
+    const maxBottomOffset = Math.max(
+        baseBottomOffset,
+        windowHeight - baseSheetHeight - SHEET_TOP_MARGIN
+    );
+    const activeBottomOffset =
+        sheetKeyboardHeight > 0
+            ? Math.min(sheetKeyboardHeight + 52, maxBottomOffset)
+            : baseBottomOffset;
+
+    useEffect(() => {
+        if (createNew !== "1" || autoOpenedFromParamRef.current) return;
+        autoOpenedFromParamRef.current = true;
+        setCreating(true);
+        setEditingPresetId(null);
+        setNewName("");
+        setNewItem("");
+        setNewSegments([]);
+    }, [createNew]);
+
+    useEffect(() => {
+        const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+        const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+        const showSub = Keyboard.addListener(showEvent, (event) => {
+            setSheetKeyboardHeight(event.endCoordinates.height);
+        });
+        const hideSub = Keyboard.addListener(hideEvent, () => {
+            setSheetKeyboardHeight(0);
+        });
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
 
     const togglePreset = (id: string) => {
         setExpandedId((prev) => (prev === id ? null : id));
@@ -61,15 +105,35 @@ export default function PresetsScreen() {
         if (!newItem.trim()) return;
 
         const next = [
-            ...newSegments,
             {
                 id: createId(),
                 label: newItem.trim(),
             },
+            ...newSegments,
         ];
 
         setNewSegments(next);
         setNewItem("");
+    };
+
+    const openCreateSheet = () => {
+        setCreating(true);
+        setEditingPresetId(null);
+        setNewName("");
+        setNewItem("");
+        setNewSegments([]);
+        setEditingItemIndex(null);
+        setEditingItemValue("");
+    };
+
+    const closeCreateSheet = () => {
+        setCreating(false);
+        setEditingPresetId(null);
+        setNewName("");
+        setNewItem("");
+        setNewSegments([]);
+        setEditingItemIndex(null);
+        setEditingItemValue("");
     };
 
     const startEditPreset = (preset: WheelPreset) => {
@@ -89,6 +153,9 @@ export default function PresetsScreen() {
         }));
 
         setNewSegments(normalized);
+        setNewItem("");
+        setEditingItemIndex(null);
+        setEditingItemValue("");
         setCreating(true);
     };
 
@@ -108,10 +175,7 @@ export default function PresetsScreen() {
             addPreset(preset);
         }
 
-        setNewName("");
-        setNewSegments([]);
-        setEditingPresetId(null);
-        setCreating(false);
+        closeCreateSheet();
     };
 
     const renderItem = ({ item: preset }: { item: WheelPreset }) => {
@@ -192,147 +256,6 @@ export default function PresetsScreen() {
         );
     };
 
-    const listHeader = (
-        <>
-            {!creating && (
-                <TouchableOpacity
-                    onPress={() => {
-                        setCreating(true);
-                        setEditingPresetId(null);
-                        setNewName("");
-                        setNewSegments([]);
-                    }}
-                    style={styles.addPresetBtn}
-                    activeOpacity={0.9}
-                >
-                    <MaterialCommunityIcons name="plus" size={22} color="#eafff0" />
-                    <Text style={styles.addPresetBtnText}>New wheel</Text>
-                </TouchableOpacity>
-            )}
-
-            {creating && (
-                <View style={styles.formCard}>
-                    <Text style={styles.formLabel}>Name</Text>
-                    <TextInput
-                        placeholder="e.g. Dinner tonight"
-                        placeholderTextColor="#6c7294"
-                        value={newName}
-                        onChangeText={setNewName}
-                        style={styles.formInput}
-                    />
-
-                    <Text style={[styles.formLabel, styles.formLabelSpaced]}>Options</Text>
-                    <View style={styles.addRow}>
-                        <TextInput
-                            placeholder="Add an option"
-                            placeholderTextColor="#6c7294"
-                            value={newItem}
-                            onChangeText={setNewItem}
-                            style={[styles.formInput, styles.addRowInput]}
-                            onSubmitEditing={addItemToNewPreset}
-                            returnKeyType="done"
-                        />
-                        <TouchableOpacity
-                            onPress={addItemToNewPreset}
-                            style={styles.addChipBtn}
-                            activeOpacity={0.9}
-                        >
-                            <MaterialCommunityIcons name="plus" size={22} color="#0f1030" />
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.chipWrap}>
-                        {newSegments.map((item, i) => {
-                            const isEditing = editingItemIndex === i;
-
-                            return (
-                                <View
-                                    key={item.id}
-                                    style={styles.editChip}
-                                    onStartShouldSetResponder={() => true}
-                                >
-                                    {isEditing ? (
-                                        <TextInput
-                                            autoFocus
-                                            value={editingItemValue}
-                                            onChangeText={setEditingItemValue}
-                                            onSubmitEditing={() => {
-                                                const updated = newSegments.map((seg) =>
-                                                    seg.id === item.id
-                                                        ? {
-                                                              ...seg,
-                                                              label:
-                                                                  editingItemValue.trim() ||
-                                                                  seg.label,
-                                                          }
-                                                        : seg
-                                                );
-                                                setNewSegments(updated);
-                                                setEditingItemIndex(null);
-                                                setEditingItemValue("");
-                                            }}
-                                            onBlur={() => {
-                                                setEditingItemIndex(null);
-                                                setEditingItemValue("");
-                                            }}
-                                            style={styles.editChipInput}
-                                        />
-                                    ) : (
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                setEditingItemIndex(i);
-                                                setEditingItemValue(item.label);
-                                            }}
-                                        >
-                                            <Text style={styles.editChipText}>{item.label}</Text>
-                                        </TouchableOpacity>
-                                    )}
-
-                                    {(editingItemIndex === null || editingItemIndex === i) && (
-                                        <TouchableOpacity
-                                            onPress={() =>
-                                                setNewSegments((prev) =>
-                                                    prev.filter((seg) => seg.id !== item.id)
-                                                )
-                                            }
-                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                        >
-                                            <MaterialCommunityIcons
-                                                name="close"
-                                                size={18}
-                                                color="#ff8a8a"
-                                            />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            );
-                        })}
-                    </View>
-
-                    <View style={styles.formActions}>
-                        <TouchableOpacity
-                            onPress={() => {
-                                setCreating(false);
-                                setEditingPresetId(null);
-                                setNewName("");
-                                setNewSegments([]);
-                            }}
-                            hitSlop={{ top: 8, bottom: 8 }}
-                        >
-                            <Text style={styles.cancelText}>Cancel</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity onPress={savePreset} activeOpacity={0.85}>
-                            <Text style={styles.saveText}>
-                                {editingPresetId ? "Save changes" : "Save wheel"}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            )}
-        </>
-    );
-
     return (
         <KeyboardAvoidingView
             style={styles.screen}
@@ -365,7 +288,7 @@ export default function PresetsScreen() {
                                 />
                             </TouchableOpacity>
                             <View style={styles.headerTitles}>
-                                <Text style={styles.screenTitle}>Saved wheels</Text>
+                                <Text style={styles.screenTitle}>My Wheels</Text>
                                 <Text style={styles.screenSubtitle}>
                                     Build, edit, and load a wheel
                                 </Text>
@@ -377,31 +300,173 @@ export default function PresetsScreen() {
                             data={presets}
                             keyExtractor={(item) => item.id}
                             renderItem={renderItem}
-                            ListHeaderComponent={
-                                <View style={styles.listHeaderWrap}>{listHeader}</View>
-                            }
                             ListEmptyComponent={
-                                !creating ? (
-                                    <View style={styles.emptyState}>
-                                        <MaterialCommunityIcons
-                                            name="bookmark-outline"
-                                            size={48}
-                                            color="#4b5076"
-                                        />
-                                        <Text style={styles.emptyTitle}>No saved wheels yet</Text>
-                                        <Text style={styles.emptySubtitle}>
-                                            Tap "New wheel" to create your first list.
-                                        </Text>
-                                    </View>
-                                ) : null
+                                <View style={styles.emptyState}>
+                                    <MaterialCommunityIcons
+                                        name="bookmark-outline"
+                                        size={48}
+                                        color="#4b5076"
+                                    />
+                                    <Text style={styles.emptyTitle}>No saved wheels yet</Text>
+                                    <Text style={styles.emptySubtitle}>
+                                        Tap "New wheel" to create your first list.
+                                    </Text>
+                                </View>
                             }
                             showsVerticalScrollIndicator={false}
                             contentContainerStyle={styles.listContent}
                             keyboardShouldPersistTaps="handled"
                         />
+                        <View style={styles.bottomButtonWrap}>
+                            <TouchableOpacity
+                                onPress={openCreateSheet}
+                                style={styles.addPresetBtn}
+                                activeOpacity={0.9}
+                            >
+                                <MaterialCommunityIcons name="plus" size={22} color="#eafff0" />
+                                <Text style={styles.addPresetBtnText}>New wheel</Text>
+                            </TouchableOpacity>
+                        </View>
                     </SafeAreaView>
                 </View>
             </TouchableWithoutFeedback>
+
+            <Modal
+                visible={creating}
+                transparent
+                animationType="slide"
+                onRequestClose={closeCreateSheet}
+            >
+                <TouchableWithoutFeedback onPress={closeCreateSheet}>
+                    <View style={styles.sheetBackdrop}>
+                        <TouchableWithoutFeedback>
+                            <View
+                                style={[
+                                    styles.sheetContainer,
+                                    { height: baseSheetHeight, marginBottom: activeBottomOffset },
+                                ]}
+                            >
+                                <ScrollView
+                                    contentContainerStyle={styles.sheetScrollContent}
+                                    keyboardShouldPersistTaps="handled"
+                                    nestedScrollEnabled
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    <View style={styles.sheetHandle} />
+                                    <Text style={styles.sheetTitle}>
+                                        {editingPresetId ? "Edit Wheel" : "New Wheel"}
+                                    </Text>
+
+                                    <Text style={styles.formLabel}>Name</Text>
+                                    <TextInput
+                                        placeholder="e.g. Dinner tonight"
+                                        placeholderTextColor="#6c7294"
+                                        value={newName}
+                                        onChangeText={setNewName}
+                                        style={styles.formInput}
+                                    />
+
+                                    <Text style={[styles.formLabel, styles.formLabelSpaced]}>Options</Text>
+                                    <View style={styles.addRow}>
+                                        <TextInput
+                                            placeholder="Add an option"
+                                            placeholderTextColor="#6c7294"
+                                            value={newItem}
+                                            onChangeText={setNewItem}
+                                            style={[styles.formInput, styles.addRowInput]}
+                                            onSubmitEditing={addItemToNewPreset}
+                                            returnKeyType="done"
+                                        />
+                                        <TouchableOpacity
+                                            onPress={addItemToNewPreset}
+                                            style={styles.addChipBtn}
+                                            activeOpacity={0.9}
+                                        >
+                                            <MaterialCommunityIcons name="plus" size={22} color="#0f1030" />
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    <View style={styles.chipWrap}>
+                                        {newSegments.map((item, i) => {
+                                            const isEditing = editingItemIndex === i;
+                                            return (
+                                                <View
+                                                    key={item.id}
+                                                    style={styles.editChip}
+                                                    onStartShouldSetResponder={() => true}
+                                                >
+                                                    {isEditing ? (
+                                                        <TextInput
+                                                            autoFocus
+                                                            value={editingItemValue}
+                                                            onChangeText={setEditingItemValue}
+                                                            onSubmitEditing={() => {
+                                                                const updated = newSegments.map((seg) =>
+                                                                    seg.id === item.id
+                                                                        ? {
+                                                                            ...seg,
+                                                                            label: editingItemValue.trim() || seg.label,
+                                                                        }
+                                                                        : seg
+                                                                );
+                                                                setNewSegments(updated);
+                                                                setEditingItemIndex(null);
+                                                                setEditingItemValue("");
+                                                            }}
+                                                            onBlur={() => {
+                                                                setEditingItemIndex(null);
+                                                                setEditingItemValue("");
+                                                            }}
+                                                            style={styles.editChipInput}
+                                                        />
+                                                    ) : (
+                                                        <TouchableOpacity
+                                                            onPress={() => {
+                                                                setEditingItemIndex(i);
+                                                                setEditingItemValue(item.label);
+                                                            }}
+                                                        >
+                                                            <Text style={styles.editChipText}>{item.label}</Text>
+                                                        </TouchableOpacity>
+                                                    )}
+
+                                                    {(editingItemIndex === null || editingItemIndex === i) && (
+                                                        <TouchableOpacity
+                                                            onPress={() =>
+                                                                setNewSegments((prev) =>
+                                                                    prev.filter((seg) => seg.id !== item.id)
+                                                                )
+                                                            }
+                                                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                        >
+                                                            <MaterialCommunityIcons
+                                                                name="close"
+                                                                size={18}
+                                                                color="#ff8a8a"
+                                                            />
+                                                        </TouchableOpacity>
+                                                    )}
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                    <View style={styles.formActions}>
+                                        <TouchableOpacity onPress={closeCreateSheet} hitSlop={{ top: 8, bottom: 8 }}>
+                                            <Text style={styles.cancelText}>Cancel</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity onPress={savePreset} activeOpacity={0.85}>
+                                            <Text style={styles.saveText}>
+                                                {editingPresetId ? "Save changes" : "Save wheel"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </ScrollView>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }
@@ -447,12 +512,16 @@ const styles = StyleSheet.create({
         marginTop: 4,
         textAlign: "center",
     },
-    listHeaderWrap: {
-        paddingBottom: 8,
-    },
     listContent: {
         paddingTop: 8,
-        paddingBottom: 32,
+        paddingBottom: 112,
+        flexGrow: 1,
+    },
+    bottomButtonWrap: {
+        position: "absolute",
+        left: 16,
+        right: 16,
+        bottom: 64,
     },
     addPresetBtn: {
         flexDirection: "row",
@@ -462,7 +531,6 @@ const styles = StyleSheet.create({
         backgroundColor: "#32d45f",
         borderRadius: 16,
         paddingVertical: 14,
-        marginBottom: 16,
         borderWidth: 2,
         borderColor: "#81ff9e",
         shadowColor: "#39e36f",
@@ -476,13 +544,41 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: "700",
     },
-    formCard: {
+    sheetBackdrop: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.6)",
+        justifyContent: "flex-end",
+    },
+    sheetContainer: {
         backgroundColor: "#171a2f",
-        borderRadius: 16,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        borderBottomLeftRadius: 20,
+        borderBottomRightRadius: 20,
         borderWidth: 1,
+        borderBottomWidth: 1,
         borderColor: "#33395d",
         padding: 16,
-        marginBottom: 20,
+        paddingBottom: 30,
+        marginBottom: 64,
+        height: "70%",
+    },
+    sheetScrollContent: {
+        paddingBottom: 12,
+    },
+    sheetHandle: {
+        alignSelf: "center",
+        width: 54,
+        height: 5,
+        borderRadius: 10,
+        backgroundColor: "#4b5076",
+        marginBottom: 10,
+    },
+    sheetTitle: {
+        color: "#f8f8ff",
+        fontSize: 24,
+        fontWeight: "700",
+        marginBottom: 8,
     },
     formLabel: {
         color: "#8f95b1",
