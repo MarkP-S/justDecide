@@ -2,14 +2,13 @@ import React from "react";
 import { Animated, View } from "react-native";
 import Svg, { G, Path, Text as SvgText } from "react-native-svg";
 import { Segment } from "../types";
+import { getSegmentAngleRanges } from "../utils/spinLogic";
 
 type Props = {
     segments: Segment[];
     wheelSize: number;
     radius: number;
-    segmentAngle: number;
     rotation: Animated.Value;
-    createPath: (index: number, radius: number, totalSegments: number) => string;
     getSegmentColor: (index: number, total: number) => string;
     formatLabel: (text: string | number) => string;
 };
@@ -18,12 +17,36 @@ export default function WheelCanvas({
     segments,
     wheelSize,
     radius,
-    segmentAngle,
     rotation,
-    createPath,
     getSegmentColor,
     formatLabel,
 }: Props) {
+    const angleRanges = React.useMemo(() => getSegmentAngleRanges(segments), [segments]);
+    const createWeightedPath = React.useCallback((startDeg: number, endDeg: number) => {
+        const sweep = endDeg - startDeg;
+        if (sweep >= 359.999) {
+            return `
+                M ${radius} ${radius}
+                m -${radius}, 0
+                a ${radius},${radius} 0 1,0 ${radius * 2},0
+                a ${radius},${radius} 0 1,0 -${radius * 2},0
+            `;
+        }
+        const startRad = (startDeg * Math.PI) / 180;
+        const endRad = (endDeg * Math.PI) / 180;
+        const x1 = radius + radius * Math.cos(startRad);
+        const y1 = radius + radius * Math.sin(startRad);
+        const x2 = radius + radius * Math.cos(endRad);
+        const y2 = radius + radius * Math.sin(endRad);
+        const largeArcFlag = sweep > 180 ? 1 : 0;
+        return [
+            `M ${radius} ${radius}`,
+            `L ${x1} ${y1}`,
+            `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+            "Z",
+        ].join(" ");
+    }, [radius]);
+
     return (
         <>
             {/* WHEEL */}
@@ -66,7 +89,7 @@ export default function WheelCanvas({
                                 {segments.map((_, i) => (
                                     <Path
                                         key={i}
-                                        d={createPath(i, radius, segments.length)}
+                                        d={createWeightedPath(angleRanges[i]?.start ?? 0, angleRanges[i]?.end ?? 360)}
                                         fill={getSegmentColor(i, Math.max(segments.length, 1))}
                                         stroke="#fff"
                                         strokeWidth={0.1}
@@ -74,7 +97,7 @@ export default function WheelCanvas({
                                 ))}
 
                                 {segments.map((item, i) => {
-                                    const angle = i * segmentAngle + segmentAngle / 2;
+                                    const angle = angleRanges[i]?.center ?? 0;
                                     const textRadius = segments.length === 1 ? 0 : radius * 0.55;
 
                                     const x =

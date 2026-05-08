@@ -28,7 +28,6 @@ import usePresetManager from "./hooks/usePresetManager";
 
 
 import {
-    createPath,
     formatLabel,
     getSegmentColor,
 } from "./utils/wheelMath";
@@ -51,14 +50,13 @@ export default function SpinWheelScreen() {
         keyboardHeight,
         startSpinCruise,
         releaseSpinCruise,
-        segmentAngle,
         resetWheel,
-        shuffleSegments,
         activeSegments,
         mutedCount,
         isSegmentMuted,
         toggleMutedSegment,
         clearMutedSegments,
+        updateSegmentWeight,
         menuVisible,
         setMenuVisible,
         menuMounted,
@@ -68,7 +66,9 @@ export default function SpinWheelScreen() {
     const segments = useWheelStore((s) => s.segments);
     const result = useWheelStore((s) => s.result);
     const loadPreset = useWheelStore((s) => s.loadPreset);
-    const { segments: presetSegments } = useLocalSearchParams();
+    const themeHue = useWheelStore((s) => s.themeHue);
+    const setThemeHue = useWheelStore((s) => s.setThemeHue);
+    const { segments: presetSegments, preset: presetData } = useLocalSearchParams();
     const activePresetId = useWheelStore((s) => s.activePresetId);
     const {
         presets,
@@ -90,9 +90,10 @@ export default function SpinWheelScreen() {
         commitPresetRename,
         confirmDeleteWheel,
     } = usePresetManager({
-        presetSegments,
+        presetData: presetData ?? presetSegments,
         segments,
         activePresetId,
+        themeHue,
         loadPreset,
         resetWheel,
         setMenuVisible,
@@ -100,6 +101,11 @@ export default function SpinWheelScreen() {
     const { width } = Dimensions.get("window");
     const wheelSize = width - 40;
     const radius = wheelSize / 2;
+    const [showThemeModal, setShowThemeModal] = React.useState(false);
+    const HUE_OPTIONS = React.useMemo(
+        () => Array.from({ length: 72 }, (_, i) => i * 5),
+        []
+    );
 
     return (
         <KeyboardAvoidingView style={styles.screen}
@@ -173,10 +179,8 @@ export default function SpinWheelScreen() {
                     segments={activeSegments}
                     wheelSize={wheelSize}
                     radius={radius}
-                    segmentAngle={segmentAngle}
                     rotation={rotation}
-                    createPath={createPath}
-                    getSegmentColor={getSegmentColor}
+                    getSegmentColor={(index, total) => getSegmentColor(index, total, themeHue)}
                     formatLabel={formatLabel}
                 />
 
@@ -197,7 +201,7 @@ export default function SpinWheelScreen() {
                     saveEdit={saveEdit}
                     keyboardHeight={keyboardHeight}
                     result={result}
-                    shuffleSegments={shuffleSegments}
+                    onOpenThemes={() => setShowThemeModal(true)}
                     onSaveWheel={openSaveWheelModal}
                     saveWheelDisabled={saveWheelDisabled}
                     activeSegmentsCount={activeSegments.length}
@@ -205,6 +209,7 @@ export default function SpinWheelScreen() {
                     isSegmentMuted={isSegmentMuted}
                     toggleMutedSegment={toggleMutedSegment}
                     restoreMutedSegments={clearMutedSegments}
+                    updateSegmentWeight={updateSegmentWeight}
                 />
             </SafeAreaView>
 
@@ -225,6 +230,52 @@ export default function SpinWheelScreen() {
                 onDeleteWheel={confirmDeleteWheel}
                 deleteWheelDisabled={!activePresetId}
             />
+
+            <AppModal
+                visible={showThemeModal}
+                onClose={() => setShowThemeModal(false)}
+            >
+                <Text style={styles.themeTitle}>Pick a theme colour</Text>
+                <Text style={styles.themeSubtitle}>
+                    Choose any hue for your wheel palette.
+                </Text>
+
+                <View style={styles.themePreviewRow}>
+                    {[0, 1, 2, 3].map((index) => (
+                        <View
+                            key={index}
+                            style={[
+                                styles.themePreviewSwatch,
+                                { backgroundColor: getSegmentColor(index, 4, themeHue) },
+                            ]}
+                        />
+                    ))}
+                </View>
+
+                <View style={styles.hueGrid}>
+                    {HUE_OPTIONS.map((hue) => {
+                        const selected = Math.abs(hue - themeHue) < 5;
+                        return (
+                            <TouchableOpacity
+                                key={hue}
+                                onPress={() => setThemeHue(hue)}
+                                style={[
+                                    styles.hueOption,
+                                    { backgroundColor: getSegmentColor(0, 1, hue) },
+                                    selected && styles.hueOptionSelected,
+                                ]}
+                            />
+                        );
+                    })}
+                </View>
+
+                <TouchableOpacity
+                    onPress={() => setShowThemeModal(false)}
+                    style={styles.themeDoneBtn}
+                >
+                    <Text style={styles.themeDoneText}>Done</Text>
+                </TouchableOpacity>
+            </AppModal>
 
             <AppModal
                 visible={showSaveModal}
@@ -338,5 +389,59 @@ const styles = StyleSheet.create({
         fontSize: 16,
         paddingVertical: 0,
         marginRight: 8,
+    },
+    themeTitle: {
+        color: "white",
+        fontSize: 18,
+        fontWeight: "700",
+        marginBottom: 4,
+    },
+    themeSubtitle: {
+        color: "#9fa7c7",
+        fontSize: 13,
+        marginBottom: 12,
+    },
+    themePreviewRow: {
+        flexDirection: "row",
+        marginBottom: 12,
+    },
+    themePreviewSwatch: {
+        flex: 1,
+        height: 22,
+        borderRadius: 6,
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: "#5b6388",
+    },
+    hueGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        marginBottom: 14,
+    },
+    hueOption: {
+        width: 30,
+        height: 30,
+        borderRadius: 6,
+        marginRight: 8,
+        marginBottom: 8,
+        borderWidth: 2,
+        borderColor: "rgba(255,255,255,0.15)",
+    },
+    hueOptionSelected: {
+        borderColor: "#ffffff",
+        transform: [{ scale: 1.1 }],
+    },
+    themeDoneBtn: {
+        alignSelf: "flex-end",
+        backgroundColor: "#2d3358",
+        borderRadius: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        borderWidth: 1,
+        borderColor: "#495182",
+    },
+    themeDoneText: {
+        color: "white",
+        fontWeight: "700",
     },
 });

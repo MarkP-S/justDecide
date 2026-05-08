@@ -8,6 +8,7 @@ import {
     KeyboardAvoidingView,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     StatusBar,
     StyleSheet,
@@ -53,6 +54,31 @@ export default function PresetsScreen() {
         sheetKeyboardHeight > 0
             ? Math.min(sheetKeyboardHeight + 52, maxBottomOffset)
             : baseBottomOffset;
+    const getSegmentsTotalWeight = (segmentList: Segment[]) =>
+        segmentList.reduce((sum, segment) => sum + Math.max(1, segment.weight ?? 1), 0);
+    const getSegmentPercent = (segment: Segment, segmentList: Segment[]) => {
+        const total = getSegmentsTotalWeight(segmentList);
+        if (total <= 0) return 0;
+        return Math.round((Math.max(1, segment.weight ?? 1) / total) * 100);
+    };
+    const adjustLocalSegmentWeight = (id: string, deltaPercent: number) => {
+        setNewSegments((prev) => {
+            const target = prev.find((segment) => segment.id === id);
+            if (!target) return prev;
+            const currentWeight = Math.max(1, target.weight ?? 1);
+            const othersWeight = prev.reduce(
+                (sum, segment) => segment.id === id ? sum : sum + Math.max(1, segment.weight ?? 1),
+                0
+            );
+            if (othersWeight <= 0) return prev;
+            const currentPercent = (currentWeight / (currentWeight + othersWeight)) * 100;
+            const targetPercent = Math.max(5, Math.min(95, currentPercent + deltaPercent));
+            const computedWeight = Math.max(1, Math.round((targetPercent / (100 - targetPercent)) * othersWeight));
+            return prev.map((segment) =>
+                segment.id === id ? { ...segment, weight: computedWeight } : segment
+            );
+        });
+    };
 
     useEffect(() => {
         if (createNew !== "1" || autoOpenedFromParamRef.current) return;
@@ -96,7 +122,7 @@ export default function PresetsScreen() {
         router.push({
             pathname: "/spinWheel",
             params: {
-                segments: JSON.stringify(preset.segments),
+                preset: JSON.stringify(preset),
             },
         });
     };
@@ -108,6 +134,7 @@ export default function PresetsScreen() {
             {
                 id: createId(),
                 label: newItem.trim(),
+                weight: 1,
             },
             ...newSegments,
         ];
@@ -150,6 +177,13 @@ export default function PresetsScreen() {
                     ? s.id
                     : createId(),
             label: typeof s === "string" ? s : s.label,
+            weight:
+                typeof s === "object" &&
+                    s !== null &&
+                    "weight" in s &&
+                    typeof s.weight === "number"
+                    ? Math.max(1, Math.round(s.weight))
+                    : 1,
         }));
 
         setNewSegments(normalized);
@@ -161,11 +195,18 @@ export default function PresetsScreen() {
 
     const savePreset = () => {
         if (!newName.trim() || newSegments.length === 0) return;
+        const existingPresetTheme = editingPresetId
+            ? presets.find((preset) => preset.id === editingPresetId)?.themeHue
+            : undefined;
 
         const preset: WheelPreset = {
             id: editingPresetId ?? createId(),
             name: newName.trim(),
             segments: newSegments,
+            themeHue:
+                typeof existingPresetTheme === "number" && Number.isFinite(existingPresetTheme)
+                    ? existingPresetTheme
+                    : 260,
             createdAt: Date.now(),
         };
 
@@ -204,7 +245,7 @@ export default function PresetsScreen() {
                             {preset.segments.map((item) => (
                                 <View key={item.id} style={styles.chip}>
                                     <Text style={styles.chipText} numberOfLines={2}>
-                                        {item.label}
+                                        {item.label} ({getSegmentPercent(item, preset.segments)}%)
                                     </Text>
                                 </View>
                             ))}
@@ -309,7 +350,7 @@ export default function PresetsScreen() {
                                     />
                                     <Text style={styles.emptyTitle}>No saved wheels yet</Text>
                                     <Text style={styles.emptySubtitle}>
-                                        Tap "New wheel" to create your first list.
+                                        Tap New wheel to create your first list.
                                     </Text>
                                 </View>
                             }
@@ -426,8 +467,35 @@ export default function PresetsScreen() {
                                                                 setEditingItemValue(item.label);
                                                             }}
                                                         >
-                                                            <Text style={styles.editChipText}>{item.label}</Text>
+                                                            <Text style={styles.editChipText}>
+                                                                {item.label} ({getSegmentPercent(item, newSegments)}%)
+                                                            </Text>
                                                         </TouchableOpacity>
+                                                    )}
+
+                                                    {editingItemIndex === null && (
+                                                        <View style={styles.editChipWeightControls}>
+                                                            <Pressable
+                                                                onPress={() => adjustLocalSegmentWeight(item.id, -5)}
+                                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                                style={({ pressed }) => [
+                                                                    styles.editChipWeightBtn,
+                                                                    pressed && styles.editChipWeightBtnPressed,
+                                                                ]}
+                                                            >
+                                                                <MaterialCommunityIcons name="minus" size={16} color="#b6bcda" />
+                                                            </Pressable>
+                                                            <Pressable
+                                                                onPress={() => adjustLocalSegmentWeight(item.id, 5)}
+                                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                                style={({ pressed }) => [
+                                                                    styles.editChipWeightBtn,
+                                                                    pressed && styles.editChipWeightBtnPressed,
+                                                                ]}
+                                                            >
+                                                                <MaterialCommunityIcons name="plus" size={16} color="#b6bcda" />
+                                                            </Pressable>
+                                                        </View>
                                                     )}
 
                                                     {(editingItemIndex === null || editingItemIndex === i) && (
@@ -661,6 +729,22 @@ const styles = StyleSheet.create({
         fontSize: 14,
         paddingRight: 4,
         maxWidth: 220,
+    },
+    editChipWeightControls: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    editChipWeightBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#2b3054",
+    },
+    editChipWeightBtnPressed: {
+        backgroundColor: "#1f2340",
     },
     formActions: {
         flexDirection: "row",

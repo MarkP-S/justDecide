@@ -7,18 +7,20 @@ import { Segment, WheelPreset } from "../types";
 import useWheelPresets from "./useWheelPresets";
 
 type Params = {
-    presetSegments: unknown;
+    presetData: unknown;
     segments: Segment[];
     activePresetId: string | null;
+    themeHue: number;
     loadPreset: (preset: WheelPreset) => void;
     resetWheel: () => void;
     setMenuVisible: (visible: boolean) => void;
 };
 
 export default function usePresetManager({
-    presetSegments,
+    presetData,
     segments,
     activePresetId,
+    themeHue,
     loadPreset,
     resetWheel,
     setMenuVisible,
@@ -39,21 +41,38 @@ export default function usePresetManager({
     );
 
     React.useEffect(() => {
-        if (!presetSegments || hasLoadedPreset.current) return;
+        if (!presetData || hasLoadedPreset.current) return;
 
         try {
-            const parsed = JSON.parse(presetSegments as string);
-            loadPreset({
-                id: "temp",
-                name: "Loaded preset",
-                segments: parsed,
-                createdAt: Date.now(),
-            });
+            const parsed = JSON.parse(presetData as string) as Partial<WheelPreset> | Segment[];
+            const presetPayload: WheelPreset =
+                Array.isArray(parsed)
+                    ? {
+                        id: "temp",
+                        name: "Loaded preset",
+                        segments: parsed,
+                        themeHue,
+                        createdAt: Date.now(),
+                    }
+                    : {
+                        id: typeof parsed.id === "string" ? parsed.id : "temp",
+                        name: typeof parsed.name === "string" ? parsed.name : "Loaded preset",
+                        segments: Array.isArray(parsed.segments) ? parsed.segments : [],
+                        themeHue:
+                            typeof parsed.themeHue === "number" && Number.isFinite(parsed.themeHue)
+                                ? parsed.themeHue
+                                : themeHue,
+                        createdAt:
+                            typeof parsed.createdAt === "number" && Number.isFinite(parsed.createdAt)
+                                ? parsed.createdAt
+                                : Date.now(),
+                    };
+            loadPreset(presetPayload);
             hasLoadedPreset.current = true;
         } catch {
             console.warn("Invalid preset data");
         }
-    }, [loadPreset, presetSegments]);
+    }, [loadPreset, presetData, themeHue]);
 
     const activePresetName = React.useMemo(() => {
         if (!activePresetId) return "My Wheel";
@@ -64,12 +83,13 @@ export default function usePresetManager({
         if (!activePresetId) return false;
         const activePreset = presets.find((preset) => preset.id === activePresetId);
         if (!activePreset) return false;
+        if ((activePreset.themeHue ?? 260) !== themeHue) return false;
         if (activePreset.segments.length !== segments.length) return false;
 
         return activePreset.segments.every(
             (segment, index) => segment.label.trim() === segments[index]?.label.trim()
         );
-    }, [activePresetId, presets, segments]);
+    }, [activePresetId, presets, segments, themeHue]);
 
     const handleSave = React.useCallback(async () => {
         if (!presetName.trim()) return;
@@ -78,6 +98,7 @@ export default function usePresetManager({
             id: createId(),
             name: presetName.trim(),
             segments,
+            themeHue,
             createdAt: Date.now(),
         };
 
@@ -85,7 +106,7 @@ export default function usePresetManager({
         loadPreset(preset);
         setPresetName("");
         setShowSaveModal(false);
-    }, [addPreset, loadPreset, presetName, segments]);
+    }, [addPreset, loadPreset, presetName, segments, themeHue]);
 
     const openSaveWheelModal = React.useCallback(async () => {
         setMenuVisible(false);
@@ -96,6 +117,7 @@ export default function usePresetManager({
                 const updatedPreset: WheelPreset = {
                     ...activePreset,
                     segments,
+                    themeHue,
                 };
                 await updatePreset(updatedPreset);
                 loadPreset(updatedPreset);
@@ -104,7 +126,7 @@ export default function usePresetManager({
         }
 
         setShowSaveModal(true);
-    }, [activePresetId, loadPreset, presets, segments, setMenuVisible, updatePreset]);
+    }, [activePresetId, loadPreset, presets, segments, setMenuVisible, themeHue, updatePreset]);
 
     const openSaveAsModal = React.useCallback(() => {
         setMenuVisible(false);

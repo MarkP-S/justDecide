@@ -1,12 +1,20 @@
-export const getSegmentColor = (index: number, total: number) => {
+export const WHEEL_THEMES = [
+    { label: "Violet", baseHue: 260 },
+    { label: "Ocean", baseHue: 205 },
+    { label: "Emerald", baseHue: 145 },
+    { label: "Sunset", baseHue: 18 },
+    { label: "Rose", baseHue: 332 },
+    { label: "Amber", baseHue: 38 },
+];
+
+export const getSegmentColor = (index: number, total: number, baseHue = 260) => {
     if (total === 1) {
-        return "#7547d1";
+        return hslToHex(baseHue, 60, 55);
     }
-    const startHue = 260;
     const spread = 60;
 
     const ratio = total === 1 ? 0 : index / total;
-    const hue = startHue + ratio * spread;
+    const hue = baseHue + ratio * spread;
 
     return hslToHex(hue, 60, 55);
 };

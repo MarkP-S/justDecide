@@ -19,6 +19,7 @@ import {
     GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
+    cancelAnimation,
     runOnJS,
     useAnimatedStyle,
     useSharedValue,
@@ -45,7 +46,7 @@ type Props = {
     saveEdit: () => void;
     keyboardHeight: number;
     result: string | null;
-    shuffleSegments: () => void;
+    onOpenThemes: () => void;
     onSaveWheel: () => void;
     saveWheelDisabled: boolean;
     activeSegmentsCount: number;
@@ -53,6 +54,7 @@ type Props = {
     isSegmentMuted: (id: string) => boolean;
     toggleMutedSegment: (id: string) => void;
     restoreMutedSegments: () => void;
+    updateSegmentWeight: (id: string, deltaPercent: number) => void;
 };
 
 export default function Controls({
@@ -72,7 +74,7 @@ export default function Controls({
     saveEdit,
     keyboardHeight,
     result,
-    shuffleSegments,
+    onOpenThemes,
     onSaveWheel,
     saveWheelDisabled,
     activeSegmentsCount,
@@ -80,9 +82,23 @@ export default function Controls({
     isSegmentMuted,
     toggleMutedSegment,
     restoreMutedSegments,
+    updateSegmentWeight,
 }: Props) {
+    const totalWeight = React.useMemo(
+        () => segments.reduce((sum, segment) => sum + Math.max(1, segment.weight ?? 1), 0),
+        [segments]
+    );
+    const getSegmentPercent = React.useCallback(
+        (segment: Segment) => {
+            if (totalWeight <= 0) return 0;
+            return Math.round((Math.max(1, segment.weight ?? 1) / totalWeight) * 100);
+        },
+        [totalWeight]
+    );
+
     const [editorVisible, setEditorVisible] = React.useState(false);
     const [addInputFocused, setAddInputFocused] = React.useState(false);
+    const [spinPressActive, setSpinPressActive] = React.useState(false);
     const sheetTranslateY = useSharedValue(0);
     const keyboardLiftY = useSharedValue(0);
     const dragStartY = useSharedValue(0);
@@ -96,6 +112,11 @@ export default function Controls({
     const scrollYRef = React.useRef(0);
     const editRowRef = React.useRef<View>(null);
     const rowOffsetsRef = React.useRef<Record<number, number>>({});
+    const [spinButtonWidth, setSpinButtonWidth] = React.useState(0);
+    const fillProgress = useSharedValue(0);
+    const fillOpacity = useSharedValue(0);
+    const spinPressActiveRef = React.useRef(false);
+    const autoReleaseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const scrollActiveRowAboveKeyboard = React.useCallback((kbHeight: number) => {
         if (kbHeight <= 0 || editingIndex === null) return;
@@ -247,11 +268,74 @@ export default function Controls({
         addSegment(input);
     }, [addSegment, input]);
 
-    const { handleSpinPressIn, handleSpinPressOut } = useSpinButtonInteraction({
+    const { handleSpinPressIn, handleSpinPressOut, forceReleaseHold } = useSpinButtonInteraction({
         spin,
         startSpinCruise,
         releaseSpinCruise,
     });
+
+    const fillBaseStyle = useAnimatedStyle(() => ({
+        opacity: fillOpacity.value,
+    }));
+
+    const fillProgressStyle = useAnimatedStyle(() => ({
+        opacity: fillOpacity.value,
+        width: Math.max(0, fillProgress.value * spinButtonWidth),
+    }));
+
+    const clearAutoReleaseTimer = React.useCallback(() => {
+        if (!autoReleaseTimerRef.current) return;
+        clearTimeout(autoReleaseTimerRef.current);
+        autoReleaseTimerRef.current = null;
+    }, []);
+
+    const releaseSpinInteraction = React.useCallback(() => {
+        if (!spinPressActiveRef.current) return;
+        spinPressActiveRef.current = false;
+        setSpinPressActive(false);
+        clearAutoReleaseTimer();
+        handleSpinPressOut();
+        cancelAnimation(fillProgress);
+        fillOpacity.value = 0;
+        fillProgress.value = 0;
+    }, [clearAutoReleaseTimer, fillOpacity, fillProgress, handleSpinPressOut]);
+
+    const onSpinPressIn = React.useCallback(() => {
+        if (activeSegmentsCount === 0) return;
+        spinPressActiveRef.current = true;
+        setSpinPressActive(true);
+        clearAutoReleaseTimer();
+        handleSpinPressIn();
+        cancelAnimation(fillProgress);
+        fillProgress.value = 0;
+        fillOpacity.value = withTiming(1, { duration: 70 });
+        fillProgress.value = withTiming(1, { duration: 10000 });
+        autoReleaseTimerRef.current = setTimeout(() => {
+            if (!spinPressActiveRef.current) return;
+            spinPressActiveRef.current = false;
+            setSpinPressActive(false);
+            clearAutoReleaseTimer();
+            forceReleaseHold();
+            cancelAnimation(fillProgress);
+            fillOpacity.value = 0;
+            fillProgress.value = 0;
+        }, 10000);
+    }, [
+        activeSegmentsCount,
+        clearAutoReleaseTimer,
+        forceReleaseHold,
+        fillOpacity,
+        fillProgress,
+        handleSpinPressIn,
+    ]);
+
+    const onSpinPressOut = React.useCallback(() => {
+        releaseSpinInteraction();
+    }, [releaseSpinInteraction]);
+
+    React.useEffect(() => {
+        return () => clearAutoReleaseTimer();
+    }, [clearAutoReleaseTimer]);
 
     return (
         <>
@@ -269,14 +353,22 @@ export default function Controls({
                 </View>
 
                 <TouchableOpacity
-                    onPressIn={handleSpinPressIn}
-                    onPressOut={handleSpinPressOut}
+                    onPressIn={onSpinPressIn}
+                    onPressOut={onSpinPressOut}
+                    onLayout={(event) => {
+                        const { width } = event.nativeEvent.layout;
+                        if (width !== spinButtonWidth) setSpinButtonWidth(width);
+                    }}
                     style={[
                         styles.spinButton,
                         (spinning || activeSegmentsCount === 0) && styles.spinButtonDisabled,
                     ]}
-                    disabled={activeSegmentsCount === 0}
+                    disabled={activeSegmentsCount === 0 || (spinning && !spinPressActive)}
                 >
+                    <View pointerEvents="none" style={styles.spinFillTrack}>
+                        <Animated.View style={[styles.spinFillBase, fillBaseStyle]} />
+                        <Animated.View style={[styles.spinFillProgress, fillProgressStyle]} />
+                    </View>
                     <MaterialCommunityIcons name="target" size={28} color="#eafff0" />
                     <Text style={styles.spinButtonText}>{spinning ? "SPINNING..." : "SPIN"}</Text>
                 </TouchableOpacity>
@@ -310,11 +402,11 @@ export default function Controls({
 
                     <TouchableOpacity
                         style={[styles.quickActionBtn, spinning && styles.quickActionBtnDisabled]}
-                        onPress={shuffleSegments}
+                        onPress={onOpenThemes}
                         disabled={spinning}
                     >
-                        <MaterialCommunityIcons name="shuffle-variant" size={18} color="#9654ff" />
-                        <Text style={styles.quickActionText}>Shuffle</Text>
+                        <MaterialCommunityIcons name="palette-outline" size={18} color="#9654ff" />
+                        <Text style={styles.quickActionText}>Themes</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -423,6 +515,29 @@ export default function Controls({
                                         }}
                                         style={styles.itemRow}
                                     >
+                                        <View style={styles.weightControls}>
+                                            <Pressable
+                                                onPress={() => updateSegmentWeight(item.id, -5)}
+                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                style={({ pressed }) => [
+                                                    styles.weightBtn,
+                                                    pressed && styles.weightBtnPressed,
+                                                ]}
+                                            >
+                                                <MaterialCommunityIcons name="minus" size={16} color="#cfd5ee" />
+                                            </Pressable>
+                                            <Text style={styles.weightText}>{getSegmentPercent(item)}%</Text>
+                                            <Pressable
+                                                onPress={() => updateSegmentWeight(item.id, 5)}
+                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                style={({ pressed }) => [
+                                                    styles.weightBtn,
+                                                    pressed && styles.weightBtnPressed,
+                                                ]}
+                                            >
+                                                <MaterialCommunityIcons name="plus" size={16} color="#cfd5ee" />
+                                            </Pressable>
+                                        </View>
                                         {editingIndex === i ? (
                                             <TextInput
                                                 ref={editInputRef}
@@ -557,6 +672,23 @@ const styles = StyleSheet.create({
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 6 },
         marginBottom: 16,
+        overflow: "hidden",
+    },
+    spinFillTrack: {
+        ...StyleSheet.absoluteFillObject,
+        borderRadius: 28,
+        overflow: "hidden",
+    },
+    spinFillBase: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "#2a7a42",
+    },
+    spinFillProgress: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        bottom: 0,
+        backgroundColor: "#32d45f",
     },
     spinButtonDisabled: {
         backgroundColor: "#317845",
@@ -705,6 +837,30 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 8,
         marginBottom: 8,
+    },
+    weightControls: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginRight: 8,
+    },
+    weightBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#2b3054",
+    },
+    weightBtnPressed: {
+        backgroundColor: "#1f2340",
+    },
+    weightText: {
+        color: "#bfc6e7",
+        fontSize: 12,
+        fontWeight: "700",
+        marginHorizontal: 8,
+        minWidth: 30,
+        textAlign: "center",
     },
     itemLabelPressable: {
         flex: 1,

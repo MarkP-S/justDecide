@@ -42,11 +42,19 @@ export default function useSpinButtonInteraction({
         spin();
     }, [clearHoldTimer, releaseSpinCruise, spin]);
 
+    const forceReleaseHold = React.useCallback(() => {
+        clearHoldTimer();
+        if (!holdActivatedRef.current) return false;
+        holdActivatedRef.current = false;
+        releaseSpinCruise();
+        return true;
+    }, [clearHoldTimer, releaseSpinCruise]);
+
     React.useEffect(() => {
         return () => {
             clearHoldTimer();
         };
     }, [clearHoldTimer]);
 
-    return { handleSpinPressIn, handleSpinPressOut };
+    return { handleSpinPressIn, handleSpinPressOut, forceReleaseHold };
 }

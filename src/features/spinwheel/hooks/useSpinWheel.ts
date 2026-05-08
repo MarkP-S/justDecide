@@ -4,6 +4,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Animated, Easing, Keyboard } from "react-native";
 import {
     calculateTotalRotation,
+    getSegmentAngleRanges,
     getWinningIndex,
     normalizeResultIndex,
 } from "../utils/spinLogic";
@@ -104,6 +105,10 @@ export default function useSpinWheel() {
         () => (activeSegments.length > 0 ? 360 / activeSegments.length : 360),
         [activeSegments.length]
     );
+    const activeAngleRanges = useMemo(
+        () => getSegmentAngleRanges(activeSegments),
+        [activeSegments]
+    );
 
     const rotation = useRef(new Animated.Value(0)).current;
     const currentRotation = useRef(0);
@@ -182,15 +187,18 @@ export default function useSpinWheel() {
        SPIN LOGIC (USES PURE UTILS)
     --------------------------*/
     // Finalizes a spin using the exact segment snapshot captured at spin start.
-    const finalizeSpin = (finalAngle: number, segmentsAtStart: typeof segments, segmentAngleAtStart: number) => {
+    const finalizeSpin = (
+        finalAngle: number,
+        segmentsAtStart: typeof segments,
+        angleRangesAtStart: ReturnType<typeof getSegmentAngleRanges>
+    ) => {
         const restingAngle = normalizeRestingAngle(finalAngle);
         currentRotation.current = restingAngle;
         rotation.setValue(restingAngle);
 
         const index = normalizeResultIndex({
             currentRotation: restingAngle,
-            segmentAngle: segmentAngleAtStart,
-            segmentsLength: segmentsAtStart.length,
+            angleRanges: angleRangesAtStart,
         });
 
         setResult(segmentsAtStart[index].label);
@@ -198,7 +206,8 @@ export default function useSpinWheel() {
     };
 
     const releaseSpinCruise = () => {
-        if (!state.spinning) return;
+        // Do not rely on render-time state here; timer callbacks can hold stale closures.
+        if (!cruiseActiveRef.current) return;
         // Transition to deceleration on the next cruise-leg boundary.
         releaseRequestedRef.current = true;
     };
@@ -247,7 +256,7 @@ export default function useSpinWheel() {
                         holdAnimRef.current = null;
 
                         const segmentsAtStart = [...activeSegments];
-                        const segmentAngleAtStart = segmentAngle;
+                        const angleRangesAtStart = getSegmentAngleRanges(segmentsAtStart);
                         if (segmentsAtStart.length === 0) {
                             dispatch({ type: "SET_SPINNING", payload: false });
                             return;
@@ -256,12 +265,11 @@ export default function useSpinWheel() {
                         const fromRotation = legTo;
                         const bufferDegrees = (CRUISE_DEG_PER_SEC * RELEASE_BUFFER_MS) / 1000;
                         const virtualReleaseRotation = fromRotation + bufferDegrees;
-                        const winningIndex = getWinningIndex(segmentsAtStart.length);
+                        const winningIndex = getWinningIndex(segmentsAtStart);
                         const totalRotation = calculateTotalRotation({
                             currentRotation: virtualReleaseRotation,
                             winningIndex,
-                            segmentAngle: segmentAngleAtStart,
-                            segmentsLength: segmentsAtStart.length,
+                            angleRanges: angleRangesAtStart,
                         }) - 360 * 4;
 
                         const transitionDurationMs = RELEASE_BUFFER_MS + 2350;
@@ -273,7 +281,7 @@ export default function useSpinWheel() {
                             useNativeDriver: true,
                         }).start(({ finished: decelFinished }) => {
                             if (!decelFinished) return;
-                            finalizeSpin(totalRotation, segmentsAtStart, segmentAngleAtStart);
+                            finalizeSpin(totalRotation, segmentsAtStart, angleRangesAtStart);
                         });
                         return;
                     }
@@ -289,7 +297,7 @@ export default function useSpinWheel() {
         if (state.spinning || activeSegments.length === 0) return;
 
         const segmentsAtStart = [...activeSegments];
-        const segmentAngleAtStart = segmentAngle;
+        const angleRangesAtStart = [...activeAngleRanges];
 
         dispatch({ type: "SET_SPINNING", payload: true });
         setResult(null);
@@ -304,12 +312,11 @@ export default function useSpinWheel() {
             currentRotation.current = fromRotation;
             rotation.setValue(fromRotation);
 
-            const winningIndex = getWinningIndex(segmentsAtStart.length);
+            const winningIndex = getWinningIndex(segmentsAtStart);
             const totalRotation = calculateTotalRotation({
                 currentRotation: fromRotation,
                 winningIndex,
-                segmentAngle: segmentAngleAtStart,
-                segmentsLength: segmentsAtStart.length,
+                angleRanges: angleRangesAtStart,
             });
 
             currentRotation.current = totalRotation;
@@ -320,7 +327,7 @@ export default function useSpinWheel() {
                 useNativeDriver: true,
             }).start(({ finished }) => {
                 if (!finished) return;
-                finalizeSpin(totalRotation, segmentsAtStart, segmentAngleAtStart);
+                finalizeSpin(totalRotation, segmentsAtStart, angleRangesAtStart);
             });
         });
     };
@@ -351,6 +358,7 @@ export default function useSpinWheel() {
             {
                 id: createId(),
                 label: text,
+                weight: 1,
             },
             ...segments,
         ]);
@@ -362,6 +370,29 @@ export default function useSpinWheel() {
         if (segments.length <= 1) return;
 
         setSegments(segments.filter((_, index) => index !== i));
+    },
+    updateSegmentWeight: (id: string, deltaPercent: number) => {
+        const target = segments.find((segment) => segment.id === id);
+        if (!target) return;
+        const currentWeight = Math.max(1, target.weight ?? 1);
+        const othersWeight = segments.reduce(
+            (sum, segment) => segment.id === id ? sum : sum + Math.max(1, segment.weight ?? 1),
+            0
+        );
+        if (othersWeight <= 0) return;
+        const currentPercent = (currentWeight / (currentWeight + othersWeight)) * 100;
+        const targetPercent = Math.max(5, Math.min(95, currentPercent + deltaPercent));
+        const computedWeight = Math.max(1, Math.round((targetPercent / (100 - targetPercent)) * othersWeight));
+        setSegments(
+            segments.map((segment) =>
+                segment.id === id
+                    ? {
+                        ...segment,
+                        weight: computedWeight,
+                    }
+                    : segment
+            )
+        );
     },
 
     activeSegments,
@@ -394,8 +425,8 @@ export default function useSpinWheel() {
 
     resetWheel: () => {
         setSegments([
-            { id: "1", label: "Kitties" },
-            { id: "2", label: "More Kitties" },
+            { id: "1", label: "Kitties", weight: 1 },
+            { id: "2", label: "More Kitties", weight: 1 },
         ]);
     },
 

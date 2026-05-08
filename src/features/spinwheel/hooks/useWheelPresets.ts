@@ -29,8 +29,12 @@ const normalizeSegments = (segments: unknown): Segment[] => {
                     "id" in segment && typeof (segment as { id?: unknown }).id === "string"
                         ? (segment as { id: string }).id
                         : createId();
+                const weightValue =
+                    "weight" in segment && typeof (segment as { weight?: unknown }).weight === "number"
+                        ? Math.max(1, Math.round((segment as { weight: number }).weight))
+                        : 1;
  
-                return { id: idValue, label };
+                return { id: idValue, label, weight: weightValue };
             }
 
             return null;
@@ -50,6 +54,10 @@ export default function useWheelPresets() {
                 const normalized = parsed.map((preset) => ({
                     ...preset,
                     segments: normalizeSegments(preset.segments),
+                    themeHue:
+                        typeof preset.themeHue === "number" && Number.isFinite(preset.themeHue)
+                            ? preset.themeHue
+                            : 260,
                 }));
                 setPresets(normalized);
             }
@@ -64,6 +72,10 @@ export default function useWheelPresets() {
             const normalized = data.map((preset) => ({
                 ...preset,
                 segments: normalizeSegments(preset.segments),
+                themeHue:
+                    typeof preset.themeHue === "number" && Number.isFinite(preset.themeHue)
+                        ? preset.themeHue
+                        : 260,
             }));
 
             await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));

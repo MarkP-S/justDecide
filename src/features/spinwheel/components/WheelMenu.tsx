@@ -88,12 +88,6 @@ export default function WheelMenu({
                     <Text style={{ color: "white" }}>Edit Wheels</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={{ paddingVertical: 10 }}>
-                    <Text style={{ color: "white" }}>
-                        Themes (coming very soon)
-                    </Text>
-                </TouchableOpacity>
-                
                 {/* SAVE PRESET ✅ */}
                 <TouchableOpacity
                     style={{ paddingVertical: 10 }}

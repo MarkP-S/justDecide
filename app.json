@@ -2,6 +2,7 @@
   "expo": {
     "name": "JustDecide",
     "slug": "test",
+    "icon": "./assets/images/JustDecide-icon.png",
     "extra": {
       "eas": {
         "projectId": "06ee782b-fc38-4b5a-a133-b1dccc7a86e6"
@@ -10,7 +11,11 @@
     "owner": "markp-s",
     "android": {
       "package": "com.markps.justdecide",
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/JustDecide-icon.png",
+        "backgroundColor": "#0f1030"
+      }
     }
   }
 }
