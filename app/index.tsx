@@ -1,9 +1,12 @@
+import OnboardingScreen from "@/src/features/onboarding/OnboardingScreen";
+import { useAppSettingsStore } from "@/src/store/useAppSettingsStore";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Animated,
     BackHandler,
     Easing,
@@ -18,16 +21,35 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export default function HomeScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const hydrate = useAppSettingsStore((s) => s.hydrate);
+    const settingsLoaded = useAppSettingsStore((s) => s.loaded);
+    const onboardingComplete = useAppSettingsStore((s) => s.onboardingComplete);
+    const completeOnboarding = useAppSettingsStore((s) => s.completeOnboarding);
+    const [phase, setPhase] = useState<"intro" | "walkthrough">("intro");
+
+    useEffect(() => {
+        hydrate();
+    }, [hydrate]);
+
+    useEffect(() => {
+        setPhase("intro");
+    }, [onboardingComplete]);
     const pulse = useRef(new Animated.Value(0)).current;
 
-    const continueToApp = useCallback(() => {
+    const continueFromIntro = useCallback(() => {
         if (Platform.OS !== "web") {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
+        if (!onboardingComplete) {
+            setPhase("walkthrough");
+            return;
+        }
         router.replace("/spinWheel");
-    }, [router]);
+    }, [onboardingComplete, router]);
 
     useEffect(() => {
+        if (phase !== "intro") return;
+
         const loop = Animated.loop(
             Animated.sequence([
                 Animated.timing(pulse, {
@@ -46,16 +68,23 @@ export default function HomeScreen() {
         );
         loop.start();
         return () => loop.stop();
-    }, [pulse]);
+    }, [phase, pulse]);
 
     useEffect(() => {
         if (Platform.OS !== "android") return;
         const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-            continueToApp();
-            return true;
+            if (phase === "walkthrough") {
+                setPhase("intro");
+                return true;
+            }
+            if (onboardingComplete) {
+                router.replace("/spinWheel");
+                return true;
+            }
+            return false;
         });
         return () => sub.remove();
-    }, [continueToApp]);
+    }, [onboardingComplete, phase, router]);
 
     const ringScale = pulse.interpolate({
         inputRange: [0, 1],
@@ -70,10 +99,33 @@ export default function HomeScreen() {
         outputRange: ["0deg", "18deg"],
     });
 
+    const finishOnboarding = useCallback(async () => {
+        await completeOnboarding();
+        router.replace("/spinWheel");
+    }, [completeOnboarding, router]);
+
+    if (!settingsLoaded) {
+        return (
+            <View style={styles.loadingRoot}>
+                <StatusBar style="light" />
+                <ActivityIndicator size="large" color="#81ff9e" />
+            </View>
+        );
+    }
+
+    if (phase === "walkthrough") {
+        return (
+            <>
+                <StatusBar style="light" />
+                <OnboardingScreen onComplete={finishOnboarding} />
+            </>
+        );
+    }
+
     return (
         <Pressable
             style={styles.pressRoot}
-            onPress={continueToApp}
+            onPress={continueFromIntro}
             android_ripple={{ color: "rgba(255,255,255,0.12)" }}
         >
             <StatusBar style="light" />
@@ -139,6 +191,12 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+    loadingRoot: {
+        flex: 1,
+        backgroundColor: "#0a0b1f",
+        alignItems: "center",
+        justifyContent: "center",
+    },
     pressRoot: {
         flex: 1,
     },

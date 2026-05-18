@@ -2,6 +2,7 @@ import { createId } from "@/src/utils/createId";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import { Segment, WheelPreset } from "../types";
+import { cloneWheelPreset } from "../utils/presetDuplicate";
 
 const STORAGE_KEY = "wheel_presets";
 
@@ -103,6 +104,18 @@ export default function useWheelPresets() {
         await savePresets(updated);
     };
 
+    const duplicatePreset = async (id: string): Promise<WheelPreset | null> => {
+        const source = presets.find((preset) => preset.id === id);
+        if (!source) return null;
+
+        const copy = cloneWheelPreset(
+            source,
+            presets.map((preset) => preset.name)
+        );
+        await addPreset(copy);
+        return copy;
+    };
+
     useEffect(() => {
         loadPresets();
     }, []);
@@ -112,6 +125,7 @@ export default function useWheelPresets() {
         addPreset,
         updatePreset,
         deletePreset,
+        duplicatePreset,
         reload: loadPresets,
     };
 }

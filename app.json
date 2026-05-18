@@ -11,6 +11,7 @@
     "owner": "markp-s",
     "android": {
       "package": "com.markps.justdecide",
+      "permissions": ["VIBRATE"],
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/JustDecide-icon.png",

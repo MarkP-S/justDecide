@@ -23,10 +23,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { createId } from "@/src/utils/createId";
 import { Segment, WheelPreset } from "../spinwheel/types";
 import useWheelPresets from "./hooks/useWheelPresets";
+import { clonePresetSegments } from "./utils/presetDuplicate";
 import { adjustSegmentWeight, getSegmentPercent } from "./utils/segmentWeight";
 
 export default function PresetsScreen() {
-    const { presets, updatePreset, deletePreset, addPreset } = useWheelPresets();
+    const { presets, updatePreset, deletePreset, addPreset, duplicatePreset } =
+        useWheelPresets();
     const router = useRouter();
     const { createNew } = useLocalSearchParams<{ createNew?: string }>();
     const autoOpenedFromParamRef = useRef(false);
@@ -43,6 +45,7 @@ export default function PresetsScreen() {
     const [editingItemValue, setEditingItemValue] = useState("");
 
     const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+    const [copyFromPresetId, setCopyFromPresetId] = useState<string | null>(null);
     const windowHeight = Dimensions.get("window").height;
     const baseSheetHeight = Math.round(windowHeight * 0.7);
     const SHEET_TOP_MARGIN = 24;
@@ -67,6 +70,7 @@ export default function PresetsScreen() {
         setNewName("");
         setNewItem("");
         setNewSegments([]);
+        setCopyFromPresetId(null);
     }, [createNew]);
 
     useEffect(() => {
@@ -94,6 +98,13 @@ export default function PresetsScreen() {
             router.back();
         } else {
             router.replace("/spinWheel");
+        }
+    };
+
+    const handleDuplicatePreset = async (preset: WheelPreset) => {
+        const copy = await duplicatePreset(preset.id);
+        if (copy) {
+            setExpandedId(copy.id);
         }
     };
 
@@ -128,6 +139,7 @@ export default function PresetsScreen() {
         setNewName("");
         setNewItem("");
         setNewSegments([]);
+        setCopyFromPresetId(null);
         setEditingItemIndex(null);
         setEditingItemValue("");
     };
@@ -138,6 +150,21 @@ export default function PresetsScreen() {
         setNewName("");
         setNewItem("");
         setNewSegments([]);
+        setCopyFromPresetId(null);
+        setEditingItemIndex(null);
+        setEditingItemValue("");
+    };
+
+    const applyCopyFromPreset = (preset: WheelPreset) => {
+        setNewSegments(clonePresetSegments(preset));
+        setCopyFromPresetId(preset.id);
+        setEditingItemIndex(null);
+        setEditingItemValue("");
+    };
+
+    const clearCopiedOptions = () => {
+        setNewSegments([]);
+        setCopyFromPresetId(null);
         setEditingItemIndex(null);
         setEditingItemValue("");
     };
@@ -255,6 +282,19 @@ export default function PresetsScreen() {
                                     color="#b6bcda"
                                 />
                                 <Text style={styles.actionBtnNeutralText}>Edit</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={() => handleDuplicatePreset(preset)}
+                                style={[styles.actionBtn, styles.actionBtnNeutral]}
+                                activeOpacity={0.85}
+                            >
+                                <MaterialCommunityIcons
+                                    name="content-copy"
+                                    size={18}
+                                    color="#8dc4ff"
+                                />
+                                <Text style={styles.actionBtnNeutralText}>Duplicate</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
@@ -385,6 +425,70 @@ export default function PresetsScreen() {
                                         onChangeText={setNewName}
                                         style={styles.formInput}
                                     />
+
+                                    {!editingPresetId && presets.length > 0 && (
+                                        <View style={styles.copyFromSection}>
+                                            <Text style={[styles.formLabel, styles.formLabelSpaced]}>
+                                                Copy options from
+                                            </Text>
+                                            <ScrollView
+                                                horizontal
+                                                showsHorizontalScrollIndicator={false}
+                                                contentContainerStyle={styles.copyFromScroll}
+                                                keyboardShouldPersistTaps="handled"
+                                            >
+                                                {presets.map((preset) => {
+                                                    const selected =
+                                                        copyFromPresetId === preset.id;
+                                                    return (
+                                                        <TouchableOpacity
+                                                            key={preset.id}
+                                                            onPress={() =>
+                                                                applyCopyFromPreset(preset)
+                                                            }
+                                                            style={[
+                                                                styles.copyFromChip,
+                                                                selected && styles.copyFromChipSelected,
+                                                            ]}
+                                                            activeOpacity={0.85}
+                                                        >
+                                                            <MaterialCommunityIcons
+                                                                name={
+                                                                    selected
+                                                                        ? "check-circle"
+                                                                        : "content-copy"
+                                                                }
+                                                                size={16}
+                                                                color={
+                                                                    selected ? "#81ff9e" : "#8dc4ff"
+                                                                }
+                                                            />
+                                                            <Text
+                                                                style={[
+                                                                    styles.copyFromChipText,
+                                                                    selected &&
+                                                                        styles.copyFromChipTextSelected,
+                                                                ]}
+                                                                numberOfLines={1}
+                                                            >
+                                                                {preset.name}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </ScrollView>
+                                            {copyFromPresetId && (
+                                                <TouchableOpacity
+                                                    onPress={clearCopiedOptions}
+                                                    hitSlop={{ top: 8, bottom: 8 }}
+                                                >
+                                                    <Text style={styles.copyFromClearText}>
+                                                        Clear copied options
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    )}
 
                                     <Text style={[styles.formLabel, styles.formLabelSpaced]}>Options</Text>
                                     <View style={styles.addRow}>
@@ -636,6 +740,45 @@ const styles = StyleSheet.create({
     },
     formLabelSpaced: {
         marginTop: 14,
+    },
+    copyFromSection: {
+        marginTop: 4,
+    },
+    copyFromScroll: {
+        gap: 8,
+        paddingTop: 8,
+        paddingRight: 4,
+    },
+    copyFromChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        maxWidth: 200,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#343b65",
+        backgroundColor: "#202543",
+    },
+    copyFromChipSelected: {
+        borderColor: "#4f9c63",
+        backgroundColor: "#1a2e24",
+    },
+    copyFromChipText: {
+        color: "#c5c9de",
+        fontSize: 14,
+        fontWeight: "500",
+        flexShrink: 1,
+    },
+    copyFromChipTextSelected: {
+        color: "#e8ebff",
+    },
+    copyFromClearText: {
+        color: "#8dc4ff",
+        fontSize: 13,
+        fontWeight: "600",
+        marginTop: 8,
     },
     formInput: {
         color: "#f4f5ff",

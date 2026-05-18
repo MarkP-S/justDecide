@@ -25,8 +25,9 @@ import Controls from "./components/Controls";
 import WheelCanvas from "./components/WheelCanvas";
 import WheelMenu from "./components/WheelMenu";
 import usePresetManager from "./hooks/usePresetManager";
-
-
+import useSpinHistory from "./hooks/useSpinHistory";
+import useSpinSound from "./hooks/useSpinSound";
+import useAppSettingsHydrate from "@/src/hooks/useAppSettingsHydrate";
 import {
     formatLabel,
     getSegmentColor,
@@ -34,6 +35,13 @@ import {
 
 export default function SpinWheelScreen() {
     const router = useRouter();
+    useAppSettingsHydrate();
+    const activePresetId = useWheelStore((s) => s.activePresetId);
+    const { history: spinHistory, addResult, clearHistory: clearSpinHistory } =
+        useSpinHistory(activePresetId);
+    const addSpinResultRef = React.useRef(addResult);
+    addSpinResultRef.current = addResult;
+
     const {
         rotation,
         spinning,
@@ -42,8 +50,8 @@ export default function SpinWheelScreen() {
         setInput,
         addSegment,
         removeSegment,
-        editingIndex,
-        setEditingIndex,
+        editingSegmentId,
+        setEditingSegmentId,
         editingValue,
         setEditingValue,
         saveEdit,
@@ -56,12 +64,20 @@ export default function SpinWheelScreen() {
         isSegmentMuted,
         toggleMutedSegment,
         clearMutedSegments,
-        updateSegmentWeight,
+        reorderSegments,
         menuVisible,
         setMenuVisible,
         menuMounted,
         menuAnim,
-    } = useSpinWheel();
+    } = useSpinWheel({
+        onSpinComplete: (label) => addSpinResultRef.current(label),
+    });
+
+    useSpinSound({
+        spinning,
+        rotation,
+        segments: activeSegments,
+    });
 
     const segments = useWheelStore((s) => s.segments);
     const result = useWheelStore((s) => s.result);
@@ -69,7 +85,6 @@ export default function SpinWheelScreen() {
     const themeHue = useWheelStore((s) => s.themeHue);
     const setThemeHue = useWheelStore((s) => s.setThemeHue);
     const { segments: presetSegments, preset: presetData } = useLocalSearchParams();
-    const activePresetId = useWheelStore((s) => s.activePresetId);
     const {
         presets,
         showSaveModal,
@@ -102,6 +117,7 @@ export default function SpinWheelScreen() {
     const wheelSize = width - 40;
     const radius = wheelSize / 2;
     const [showThemeModal, setShowThemeModal] = React.useState(false);
+    const [showRecentSpinsModal, setShowRecentSpinsModal] = React.useState(false);
     const HUE_OPTIONS = React.useMemo(
         () => Array.from({ length: 72 }, (_, i) => i * 5),
         []
@@ -194,8 +210,8 @@ export default function SpinWheelScreen() {
                     addSegment={addSegment}
                     segments={segments}
                     removeSegment={removeSegment}
-                    editingIndex={editingIndex}
-                    setEditingIndex={setEditingIndex}
+                    editingSegmentId={editingSegmentId}
+                    setEditingSegmentId={setEditingSegmentId}
                     editingValue={editingValue}
                     setEditingValue={setEditingValue}
                     saveEdit={saveEdit}
@@ -209,7 +225,7 @@ export default function SpinWheelScreen() {
                     isSegmentMuted={isSegmentMuted}
                     toggleMutedSegment={toggleMutedSegment}
                     restoreMutedSegments={clearMutedSegments}
-                    updateSegmentWeight={updateSegmentWeight}
+                    reorderSegments={reorderSegments}
                 />
             </SafeAreaView>
 
@@ -229,7 +245,15 @@ export default function SpinWheelScreen() {
                     setMenuVisible(false);
                     router.push("/presets");
                 }}
+                onOpenRecentSpins={() => {
+                    setMenuVisible(false);
+                    setShowRecentSpinsModal(true);
+                }}
                 onSavePreset={openSaveAsModal}
+                onOpenSettings={() => {
+                    setMenuVisible(false);
+                    router.push("/settings");
+                }}
                 onOpenAbout={() => {
                     setMenuVisible(false);
                     router.push("/about");
@@ -237,6 +261,37 @@ export default function SpinWheelScreen() {
                 onDeleteWheel={confirmDeleteWheel}
                 deleteWheelDisabled={!activePresetId}
             />
+
+            <AppModal
+                visible={showRecentSpinsModal}
+                onClose={() => setShowRecentSpinsModal(false)}
+            >
+                <View style={styles.historyHeader}>
+                    <Text style={styles.historyTitle}>Recent spins</Text>
+                    {spinHistory.length > 0 && (
+                        <TouchableOpacity onPress={clearSpinHistory} hitSlop={8}>
+                            <Text style={styles.historyClear}>Clear</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+                {spinHistory.length === 0 ? (
+                    <Text style={styles.historyEmpty}>No spins yet for this wheel.</Text>
+                ) : (
+                    spinHistory.map((entry, index) => (
+                        <View
+                            key={`${entry.at}-${entry.label}-${index}`}
+                            style={[
+                                styles.historyRow,
+                                index === spinHistory.length - 1 && styles.historyRowLast,
+                            ]}
+                        >
+                            <Text style={styles.historyLabel} numberOfLines={2}>
+                                {entry.label}
+                            </Text>
+                        </View>
+                    ))
+                )}
+            </AppModal>
 
             <AppModal
                 visible={showThemeModal}
@@ -396,6 +451,42 @@ const styles = StyleSheet.create({
         fontSize: 16,
         paddingVertical: 0,
         marginRight: 8,
+    },
+    historyHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 12,
+    },
+    historyTitle: {
+        color: "#8f95b1",
+        fontSize: 12,
+        fontWeight: "700",
+        letterSpacing: 1,
+        textTransform: "uppercase",
+    },
+    historyClear: {
+        color: "#8dc4ff",
+        fontSize: 12,
+        fontWeight: "600",
+    },
+    historyEmpty: {
+        color: "#9aa0b8",
+        fontSize: 14,
+        lineHeight: 20,
+    },
+    historyRow: {
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: "#33395d",
+    },
+    historyRowLast: {
+        borderBottomWidth: 0,
+    },
+    historyLabel: {
+        color: "#f4f5ff",
+        fontSize: 16,
+        fontWeight: "500",
     },
     themeTitle: {
         color: "white",

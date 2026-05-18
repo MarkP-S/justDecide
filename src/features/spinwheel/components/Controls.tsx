@@ -28,6 +28,9 @@ import Animated, {
 } from "react-native-reanimated";
 import useSpinButtonInteraction from "../hooks/useSpinButtonInteraction";
 import { Segment } from "../types";
+import { adjustSegmentWeight, getSegmentPercent } from "../utils/segmentWeight";
+import { useWheelStore } from "@/src/store/useWheelStore";
+const EDITOR_ROW_HEIGHT = 60;
 
 type Props = {
     spin: () => void;
@@ -38,9 +41,9 @@ type Props = {
     setInput: (text: string) => void;
     addSegment: (draftLabel?: string) => void;
     segments: Segment[];
-    removeSegment: (index: number) => void;
-    editingIndex: number | null;
-    setEditingIndex: (index: number | null) => void;
+    removeSegment: (id: string) => void;
+    editingSegmentId: string | null;
+    setEditingSegmentId: (id: string | null) => void;
     editingValue: string;
     setEditingValue: (val: string) => void;
     saveEdit: () => void;
@@ -54,7 +57,7 @@ type Props = {
     isSegmentMuted: (id: string) => boolean;
     toggleMutedSegment: (id: string) => void;
     restoreMutedSegments: () => void;
-    updateSegmentWeight: (id: string, deltaShares: number) => void;
+    reorderSegments: (segments: Segment[]) => void;
 };
 
 export default function Controls({
@@ -67,8 +70,8 @@ export default function Controls({
     addSegment,
     segments,
     removeSegment,
-    editingIndex,
-    setEditingIndex,
+    editingSegmentId,
+    setEditingSegmentId,
     editingValue,
     setEditingValue,
     saveEdit,
@@ -82,21 +85,12 @@ export default function Controls({
     isSegmentMuted,
     toggleMutedSegment,
     restoreMutedSegments,
-    updateSegmentWeight,
+    reorderSegments,
 }: Props) {
-    const totalWeight = React.useMemo(
-        () => segments.reduce((sum, segment) => sum + Math.max(1, segment.weight ?? 1), 0),
-        [segments]
-    );
-    const getSegmentPercent = React.useCallback(
-        (segment: Segment) => {
-            if (totalWeight <= 0) return 0;
-            return Math.round((Math.max(1, segment.weight ?? 1) / totalWeight) * 100);
-        },
-        [totalWeight]
-    );
-
     const [editorVisible, setEditorVisible] = React.useState(false);
+    const [editorSegments, setEditorSegments] = React.useState(() => [...segments]);
+    const editorSegmentsRef = React.useRef(editorSegments);
+    editorSegmentsRef.current = editorSegments;
     const [addInputFocused, setAddInputFocused] = React.useState(false);
     const [spinPressActive, setSpinPressActive] = React.useState(false);
     const sheetTranslateY = useSharedValue(0);
@@ -111,7 +105,6 @@ export default function Controls({
     const scrollListRef = React.useRef<ScrollView>(null);
     const scrollYRef = React.useRef(0);
     const editRowRef = React.useRef<View>(null);
-    const rowOffsetsRef = React.useRef<Record<number, number>>({});
     const [spinButtonWidth, setSpinButtonWidth] = React.useState(0);
     const fillProgress = useSharedValue(0);
     const fillOpacity = useSharedValue(0);
@@ -119,7 +112,7 @@ export default function Controls({
     const autoReleaseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const scrollActiveRowAboveKeyboard = React.useCallback((kbHeight: number) => {
-        if (kbHeight <= 0 || editingIndex === null) return;
+        if (kbHeight <= 0 || editingSegmentId === null) return;
         const windowHeight = Dimensions.get("window").height;
         const margin = 16;
         const visibleBottom = windowHeight - kbHeight - margin;
@@ -128,16 +121,40 @@ export default function Controls({
             if (rowBottom <= visibleBottom) return;
             const delta = rowBottom - visibleBottom + 12;
             const nextY = scrollYRef.current + delta;
-            scrollListRef.current?.scrollTo({ y: Math.max(0, nextY), animated: true });
+            scrollListRef.current?.scrollTo({
+                y: Math.max(0, nextY),
+                animated: true,
+            });
         });
-    }, [editingIndex]);
+    }, [editingSegmentId]);
 
     const scrollToEditingRow = React.useCallback((index: number) => {
-        const measuredY = rowOffsetsRef.current[index];
-        const fallbackY = index * 64;
-        const targetY = Math.max(0, (measuredY ?? fallbackY) - 32);
-        scrollListRef.current?.scrollTo({ y: targetY, animated: true });
+        scrollListRef.current?.scrollTo({
+            y: Math.max(0, index * EDITOR_ROW_HEIGHT - 32),
+            animated: true,
+        });
     }, []);
+
+    const listContentStyle = React.useMemo(
+        () => [
+            styles.itemsListContent,
+            editingSegmentId !== null && {
+                paddingBottom: keyboardHeight + 120,
+            },
+        ],
+        [editingSegmentId, keyboardHeight]
+    );
+
+    const handleEditorWeightChange = React.useCallback(
+        (id: string, deltaShares: number) => {
+            const next = adjustSegmentWeight(editorSegmentsRef.current, id, deltaShares);
+            if (next === editorSegmentsRef.current) return;
+            editorSegmentsRef.current = next;
+            setEditorSegments(next);
+            useWheelStore.getState().setSegments(next);
+        },
+        []
+    );
 
     const focusEditInputSoon = React.useCallback(() => {
         if (focusInputTimeoutRef.current) {
@@ -157,7 +174,7 @@ export default function Controls({
     }, [editorVisible]);
 
     React.useEffect(() => {
-        if (!editorVisible || editingIndex === null) return;
+        if (!editorVisible || editingSegmentId === null) return;
         const eventName =
             Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
         const sub = Keyboard.addListener(eventName, (e) => {
@@ -167,10 +184,10 @@ export default function Controls({
             });
         });
         return () => sub.remove();
-    }, [editorVisible, editingIndex, scrollActiveRowAboveKeyboard]);
+    }, [editorVisible, editingSegmentId, scrollActiveRowAboveKeyboard]);
 
     React.useEffect(() => {
-        if (!editorVisible || editingIndex === null || keyboardHeight <= 0) return;
+        if (!editorVisible || editingSegmentId === null || keyboardHeight <= 0) return;
         const t = setTimeout(
             () => scrollActiveRowAboveKeyboard(keyboardHeight),
             120
@@ -178,7 +195,7 @@ export default function Controls({
         return () => clearTimeout(t);
     }, [
         editorVisible,
-        editingIndex,
+        editingSegmentId,
         keyboardHeight,
         scrollActiveRowAboveKeyboard,
     ]);
@@ -187,8 +204,32 @@ export default function Controls({
         const now = Date.now();
         if (isClosingRef.current) return;
         if (now - lastClosedAtRef.current < 320) return;
+        const next = [...segments];
+        setEditorSegments(next);
+        editorSegmentsRef.current = next;
         setEditorVisible(true);
-    }, []);
+    }, [segments]);
+
+    React.useEffect(() => {
+        if (!editorVisible) return;
+        setEditorSegments((prev) => {
+            const segmentById = new Map(segments.map((segment) => [segment.id, segment]));
+            const ordered = prev
+                .map((segment) => segmentById.get(segment.id))
+                .filter((segment): segment is Segment => !!segment);
+            const prevIds = new Set(prev.map((segment) => segment.id));
+            const added = segments.filter((segment) => !prevIds.has(segment.id));
+            if (added.length === 0 && ordered.length === prev.length) {
+                const refreshed = ordered.map((segment, index) =>
+                    segment === prev[index] ? prev[index] : segment
+                );
+                return refreshed.some((segment, index) => segment !== prev[index])
+                    ? refreshed
+                    : prev;
+            }
+            return [...ordered, ...added];
+        });
+    }, [editorVisible, segments]);
 
     const finalizeClose = React.useCallback(() => {
         focusEditRowTokenRef.current += 1;
@@ -197,12 +238,13 @@ export default function Controls({
             focusInputTimeoutRef.current = null;
         }
         saveEdit();
+        reorderSegments(editorSegmentsRef.current);
         setEditorVisible(false);
-        setEditingIndex(null);
+        setEditingSegmentId(null);
         setEditingValue("");
         lastClosedAtRef.current = Date.now();
         isClosingRef.current = false;
-    }, [saveEdit, setEditingIndex, setEditingValue]);
+    }, [reorderSegments, saveEdit, setEditingSegmentId, setEditingValue]);
 
     const closeEditor = React.useCallback(() => {
         if (isClosingRef.current) return;
@@ -226,7 +268,7 @@ export default function Controls({
         const shouldLift =
             editorVisible &&
             keyboardHeight > 0 &&
-            (editingIndex !== null || addInputFocused);
+            (editingSegmentId !== null || addInputFocused);
         const targetLift = shouldLift
             ? Math.min(Math.max(0, keyboardHeight - 20), 300)
             : 0;
@@ -234,7 +276,7 @@ export default function Controls({
         keyboardLiftY.value = withTiming(targetLift, { duration: 180 });
     }, [
         addInputFocused,
-        editingIndex,
+        editingSegmentId,
         editorVisible,
         keyboardHeight,
         keyboardLiftY,
@@ -345,6 +387,27 @@ export default function Controls({
                     { marginBottom: (editorVisible ? 0 : keyboardHeight) + 28 },
                 ]}
             >
+                {mutedCount > 0 && (
+                    <View style={styles.hiddenBanner}>
+                        <MaterialCommunityIcons
+                            name="eye-off-outline"
+                            size={18}
+                            color="#c9a0ff"
+                        />
+                        <Text style={styles.hiddenBannerText}>
+                            {mutedCount} hidden
+                        </Text>
+                        <TouchableOpacity
+                            onPress={restoreMutedSegments}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Restore hidden options"
+                        >
+                            <Text style={styles.hiddenBannerRestore}>Restore</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
                 <View style={styles.resultCard}>
                     <Text style={styles.resultLabel}>RESULT</Text>
                     <Text style={styles.resultText}>
@@ -369,7 +432,7 @@ export default function Controls({
                         <Animated.View style={[styles.spinFillBase, fillBaseStyle]} />
                         <Animated.View style={[styles.spinFillProgress, fillProgressStyle]} />
                     </View>
-                    <MaterialCommunityIcons name="target" size={28} color="#eafff0" />
+                    <MaterialCommunityIcons name="target" size={26} color="#eafff0" />
                     <Text style={styles.spinButtonText}>{spinning ? "SPINNING..." : "SPIN"}</Text>
                 </TouchableOpacity>
                 {activeSegmentsCount === 0 && (
@@ -386,7 +449,7 @@ export default function Controls({
                     >
                         <MaterialCommunityIcons
                             name="content-save-outline"
-                            size={18}
+                            size={17}
                             color={saveWheelDisabled ? "#4f8f63" : "#37da66"}
                         />
                         <Text style={styles.quickActionText}>Save Wheel</Text>
@@ -396,7 +459,7 @@ export default function Controls({
                         style={styles.quickActionBtn}
                         onPress={openEditor}
                     >
-                        <MaterialCommunityIcons name="pencil" size={18} color="#57a8ff" />
+                        <MaterialCommunityIcons name="pencil" size={17} color="#57a8ff" />
                         <Text style={styles.quickActionText}>Edit List</Text>
                     </TouchableOpacity>
 
@@ -405,7 +468,7 @@ export default function Controls({
                         onPress={onOpenThemes}
                         disabled={spinning}
                     >
-                        <MaterialCommunityIcons name="palette-outline" size={18} color="#9654ff" />
+                        <MaterialCommunityIcons name="palette-outline" size={17} color="#9654ff" />
                         <Text style={styles.quickActionText}>Themes</Text>
                     </TouchableOpacity>
                 </View>
@@ -487,12 +550,7 @@ export default function Controls({
                             <ScrollView
                                 ref={scrollListRef}
                                 style={styles.itemsList}
-                                contentContainerStyle={[
-                                    styles.itemsListContent,
-                                    editingIndex !== null && {
-                                        paddingBottom: keyboardHeight + 120,
-                                    },
-                                ]}
+                                contentContainerStyle={listContentStyle}
                                 keyboardShouldPersistTaps="always"
                                 keyboardDismissMode="none"
                                 automaticallyAdjustKeyboardInsets={
@@ -506,112 +564,143 @@ export default function Controls({
                                 showsVerticalScrollIndicator={false}
                                 nestedScrollEnabled
                             >
-                                {segments.map((item, i) => (
-                                    <View
-                                        key={item.id}
-                                        ref={editingIndex === i ? editRowRef : undefined}
-                                        onLayout={(event) => {
-                                            rowOffsetsRef.current[i] = event.nativeEvent.layout.y;
-                                        }}
-                                        style={styles.itemRow}
-                                    >
-                                        <View style={styles.weightControls}>
-                                            <Pressable
-                                                onPress={() => updateSegmentWeight(item.id, -1)}
-                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                                style={({ pressed }) => [
-                                                    styles.weightBtn,
-                                                    pressed && styles.weightBtnPressed,
-                                                ]}
-                                            >
-                                                <MaterialCommunityIcons name="minus" size={16} color="#cfd5ee" />
-                                            </Pressable>
-                                            <Text style={styles.weightText}>{getSegmentPercent(item)}%</Text>
-                                            <Pressable
-                                                onPress={() => updateSegmentWeight(item.id, 1)}
-                                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                                style={({ pressed }) => [
-                                                    styles.weightBtn,
-                                                    pressed && styles.weightBtnPressed,
-                                                ]}
-                                            >
-                                                <MaterialCommunityIcons name="plus" size={16} color="#cfd5ee" />
-                                            </Pressable>
-                                        </View>
-                                        {editingIndex === i ? (
-                                            <TextInput
-                                                ref={editInputRef}
-                                                value={editingValue}
-                                                onChangeText={setEditingValue}
-                                                onFocus={() => {
-                                                    scrollToEditingRow(i);
-                                                    requestAnimationFrame(() => {
-                                                        setTimeout(() => {
-                                                            if (keyboardHeight > 0) {
-                                                                scrollActiveRowAboveKeyboard(
-                                                                    keyboardHeight
-                                                                );
-                                                            }
-                                                        }, 160);
-                                                    });
-                                                }}
-                                                onSubmitEditing={saveEdit}
-                                                style={styles.itemInput}
-                                                returnKeyType="done"
-                                                blurOnSubmit
-                                            />
-                                        ) : (
-                                            <Pressable
-                                                onPress={() => {
-                                                    saveEdit();
-                                                    setEditingIndex(i);
-                                                    setEditingValue(item.label);
-                                                    focusEditInputSoon();
-                                                }}
-                                                style={styles.itemLabelPressable}
-                                            >
-                                                <Text
-                                                    style={[
-                                                        styles.itemText,
-                                                        isSegmentMuted(item.id) && styles.itemTextMuted,
+                                {editorSegments.map((item, i) => (
+                                    <View key={item.id} style={styles.itemRow}>
+                                        <View
+                                            ref={
+                                                editingSegmentId === item.id
+                                                    ? editRowRef
+                                                    : undefined
+                                            }
+                                            style={styles.itemRowInner}
+                                        >
+                                            <View style={styles.weightControls}>
+                                                <Pressable
+                                                    onPress={() =>
+                                                        handleEditorWeightChange(item.id, -1)
+                                                    }
+                                                    hitSlop={{
+                                                        top: 8,
+                                                        bottom: 8,
+                                                        left: 4,
+                                                        right: 4,
+                                                    }}
+                                                    style={({ pressed }) => [
+                                                        styles.weightBtn,
+                                                        pressed && styles.weightBtnPressed,
                                                     ]}
                                                 >
-                                                    {item.label}
+                                                    <MaterialCommunityIcons
+                                                        name="menu-left"
+                                                        size={24}
+                                                        color="#9aa3c7"
+                                                    />
+                                                </Pressable>
+                                                <Text style={styles.weightText}>
+                                                    {getSegmentPercent(item, editorSegments)}%
                                                 </Text>
-                                            </Pressable>
-                                        )}
+                                                <Pressable
+                                                    onPress={() =>
+                                                        handleEditorWeightChange(item.id, 1)
+                                                    }
+                                                    hitSlop={{
+                                                        top: 8,
+                                                        bottom: 8,
+                                                        left: 4,
+                                                        right: 4,
+                                                    }}
+                                                    style={({ pressed }) => [
+                                                        styles.weightBtn,
+                                                        pressed && styles.weightBtnPressed,
+                                                    ]}
+                                                >
+                                                    <MaterialCommunityIcons
+                                                        name="menu-right"
+                                                        size={24}
+                                                        color="#9aa3c7"
+                                                    />
+                                                </Pressable>
+                                            </View>
+                                            {editingSegmentId === item.id ? (
+                                                <TextInput
+                                                    ref={editInputRef}
+                                                    value={editingValue}
+                                                    onChangeText={setEditingValue}
+                                                    onFocus={() => {
+                                                        scrollToEditingRow(i);
+                                                        requestAnimationFrame(() => {
+                                                            setTimeout(() => {
+                                                                if (keyboardHeight > 0) {
+                                                                    scrollActiveRowAboveKeyboard(
+                                                                        keyboardHeight
+                                                                    );
+                                                                }
+                                                            }, 160);
+                                                        });
+                                                    }}
+                                                    onSubmitEditing={saveEdit}
+                                                    style={styles.itemInput}
+                                                    returnKeyType="done"
+                                                    blurOnSubmit
+                                                />
+                                            ) : (
+                                                <Pressable
+                                                    onPress={() => {
+                                                        saveEdit();
+                                                        setEditingSegmentId(item.id);
+                                                        setEditingValue(item.label);
+                                                        focusEditInputSoon();
+                                                    }}
+                                                    style={styles.itemLabelPressable}
+                                                >
+                                                    <Text
+                                                        style={[
+                                                            styles.itemText,
+                                                            isSegmentMuted(item.id) &&
+                                                                styles.itemTextMuted,
+                                                        ]}
+                                                    >
+                                                        {item.label}
+                                                    </Text>
+                                                </Pressable>
+                                            )}
 
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                saveEdit();
-                                                toggleMutedSegment(item.id);
-                                            }}
-                                            style={styles.iconBtn}
-                                        >
-                                            <MaterialCommunityIcons
-                                                name={
-                                                    isSegmentMuted(item.id)
-                                                        ? "eye-off-outline"
-                                                        : "eye-outline"
-                                                }
-                                                size={20}
-                                                color={
-                                                    isSegmentMuted(item.id)
-                                                        ? "#e19cff"
-                                                        : "#b6bcda"
-                                                }
-                                            />
-                                        </TouchableOpacity>
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    saveEdit();
+                                                    toggleMutedSegment(item.id);
+                                                }}
+                                                style={styles.iconBtn}
+                                            >
+                                                <MaterialCommunityIcons
+                                                    name={
+                                                        isSegmentMuted(item.id)
+                                                            ? "eye-off-outline"
+                                                            : "eye-outline"
+                                                    }
+                                                    size={20}
+                                                    color={
+                                                        isSegmentMuted(item.id)
+                                                            ? "#e19cff"
+                                                            : "#b6bcda"
+                                                    }
+                                                />
+                                            </TouchableOpacity>
 
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                saveEdit();
-                                                removeSegment(i);
-                                            }}
-                                            style={styles.iconBtn}
-                                        >
-                                            <MaterialCommunityIcons name="trash-can-outline" size={20} color="#ff5d73" />
-                                        </TouchableOpacity>
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    saveEdit();
+                                                    removeSegment(item.id);
+                                                }}
+                                                style={styles.iconBtn}
+                                            >
+                                                <MaterialCommunityIcons
+                                                    name="trash-can-outline"
+                                                    size={20}
+                                                    color="#ff5d73"
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
                                 ))}
                             </ScrollView>
@@ -633,50 +722,75 @@ export default function Controls({
 const styles = StyleSheet.create({
     container: {
         paddingHorizontal: 16,
-        paddingTop: 10,
-        paddingBottom: 30,
+        paddingTop: 8,
+        paddingBottom: 27,
+    },
+    hiddenBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 10,
+        paddingVertical: 9,
+        paddingHorizontal: 11,
+        borderRadius: 11,
+        borderWidth: 1,
+        borderColor: "#3d3560",
+        backgroundColor: "rgba(61, 48, 96, 0.45)",
+    },
+    hiddenBannerText: {
+        flex: 1,
+        color: "#d4c8f0",
+        fontSize: 14,
+        fontWeight: "500",
+    },
+    hiddenBannerRestore: {
+        color: "#8dc4ff",
+        fontSize: 14,
+        fontWeight: "700",
     },
     resultCard: {
-        borderRadius: 16,
+        borderRadius: 15,
         borderWidth: 1,
         borderColor: "#272b57",
         backgroundColor: "rgba(14, 17, 44, 0.9)",
-        paddingVertical: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
         alignItems: "center",
-        marginBottom: 14,
+        marginBottom: 11,
     },
     resultLabel: {
         color: "#8f95b1",
         fontSize: 12,
-        letterSpacing: 1.2,
-        marginBottom: 4,
+        letterSpacing: 1.15,
+        marginBottom: 3,
     },
     resultText: {
         color: "white",
-        fontSize: 30,
+        fontSize: 27,
         fontWeight: "700",
         textAlign: "center",
+        lineHeight: 31,
     },
     spinButton: {
         backgroundColor: "#32d45f",
-        borderRadius: 28,
-        paddingVertical: 18,
+        borderRadius: 25,
+        paddingVertical: 15,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        gap: 10,
+        gap: 9,
         borderWidth: 2,
         borderColor: "#81ff9e",
         shadowColor: "#39e36f",
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 6 },
-        marginBottom: 16,
+        shadowOpacity: 0.32,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 5 },
+        marginBottom: 12,
         overflow: "hidden",
     },
     spinFillTrack: {
         ...StyleSheet.absoluteFillObject,
-        borderRadius: 28,
+        borderRadius: 25,
         overflow: "hidden",
     },
     spinFillBase: {
@@ -696,38 +810,38 @@ const styles = StyleSheet.create({
     },
     spinButtonText: {
         color: "white",
-        fontSize: 40,
+        fontSize: 36,
         fontWeight: "800",
-        letterSpacing: 1.5,
+        letterSpacing: 1.35,
     },
     spinDisabledText: {
         color: "#8f95b1",
         fontSize: 13,
         textAlign: "center",
-        marginTop: -8,
-        marginBottom: 12,
+        marginTop: -6,
+        marginBottom: 10,
     },
     quickActions: {
         flexDirection: "row",
-        borderRadius: 18,
+        borderRadius: 16,
         borderWidth: 1,
         borderColor: "#292d57",
         backgroundColor: "rgba(16, 17, 42, 0.9)",
-        paddingVertical: 8,
+        paddingVertical: 6,
     },
     quickActionBtn: {
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
-        gap: 6,
-        paddingVertical: 8,
+        gap: 5,
+        paddingVertical: 7,
     },
     quickActionBtnDisabled: {
         opacity: 0.45,
     },
     quickActionText: {
         color: "#f4f5ff",
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: "500",
     },
     sheetBackdrop: {
@@ -828,38 +942,41 @@ const styles = StyleSheet.create({
         paddingBottom: 28,
     },
     itemRow: {
+        height: EDITOR_ROW_HEIGHT,
+        marginBottom: 8,
+    },
+    itemRowInner: {
+        flex: 1,
         flexDirection: "row",
         alignItems: "center",
         backgroundColor: "#202543",
         borderRadius: 10,
         borderWidth: 1,
         borderColor: "#343b65",
-        paddingHorizontal: 10,
+        paddingHorizontal: 8,
         paddingVertical: 8,
-        marginBottom: 8,
     },
     weightControls: {
         flexDirection: "row",
         alignItems: "center",
-        marginRight: 8,
+        marginRight: 6,
+        minWidth: 72,
     },
     weightBtn: {
-        width: 28,
+        width: 24,
         height: 28,
-        borderRadius: 14,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#2b3054",
+        flexShrink: 0,
     },
     weightBtnPressed: {
-        backgroundColor: "#1f2340",
+        opacity: 0.55,
     },
     weightText: {
+        flex: 1,
         color: "#bfc6e7",
         fontSize: 12,
         fontWeight: "700",
-        marginHorizontal: 8,
-        minWidth: 30,
         textAlign: "center",
     },
     itemLabelPressable: {

@@ -55,6 +55,7 @@ type WheelState = {
 
     // Store actions.
     setSegments: (segments: Segment[]) => void;
+    reorderSegments: (ordered: Segment[]) => void;
     setResult: (result: string | null) => void;
     setThemeHue: (hue: number) => void;
 
@@ -74,6 +75,44 @@ export const useWheelStore = create<WheelState>((set) => ({
         const normalized = normalizeSegments(segments);
         set({ segments: normalized.length > 0 ? normalized : DEFAULT_SEGMENTS });
     },
+
+    reorderSegments: (ordered) =>
+        set((state) => {
+            if (ordered.length === 0) {
+                return { segments: DEFAULT_SEGMENTS };
+            }
+
+            const byId = new Map(state.segments.map((segment) => [segment.id, segment]));
+            const reordered: Segment[] = [];
+
+            for (const item of ordered) {
+                const existing = byId.get(item.id);
+                if (!existing) {
+                    const normalized = normalizeSegments(ordered);
+                    return {
+                        segments:
+                            normalized.length > 0 ? normalized : DEFAULT_SEGMENTS,
+                    };
+                }
+                reordered.push(existing);
+            }
+
+            if (reordered.length !== state.segments.length) {
+                const normalized = normalizeSegments(ordered);
+                return {
+                    segments: normalized.length > 0 ? normalized : DEFAULT_SEGMENTS,
+                };
+            }
+
+            const orderChanged = reordered.some(
+                (segment, index) => segment !== state.segments[index]
+            );
+            if (!orderChanged) {
+                return state;
+            }
+
+            return { segments: reordered };
+        }),
 
     setResult: (result) => set({ result }),
     setThemeHue: (hue) => set({ themeHue: hue }),

@@ -1,3 +1,4 @@
+import { useAppSettingsStore } from "@/src/store/useAppSettingsStore";
 import { useWheelStore } from "@/src/store/useWheelStore";
 import { createId } from "@/src/utils/createId";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -18,7 +19,7 @@ type State = {
     input: string;
     spinning: boolean;
 
-    editingIndex: number | null;
+    editingSegmentId: string | null;
     editingValue: string;
 
     keyboardHeight: number;
@@ -33,7 +34,7 @@ type State = {
 type Action =
     | { type: "SET_INPUT"; payload: string }
     | { type: "SET_SPINNING"; payload: boolean }
-    | { type: "SET_EDIT_INDEX"; payload: number | null }
+    | { type: "SET_EDIT_SEGMENT_ID"; payload: string | null }
     | { type: "SET_EDIT_VALUE"; payload: string }
     | { type: "SET_KEYBOARD"; payload: number }
     | { type: "SET_MENU_VISIBLE"; payload: boolean }
@@ -50,8 +51,8 @@ function reducer(state: State, action: Action): State {
         case "SET_SPINNING":
             return { ...state, spinning: action.payload };
 
-        case "SET_EDIT_INDEX":
-            return { ...state, editingIndex: action.payload };
+        case "SET_EDIT_SEGMENT_ID":
+            return { ...state, editingSegmentId: action.payload };
 
         case "SET_EDIT_VALUE":
             return { ...state, editingValue: action.payload };
@@ -77,7 +78,7 @@ const initialState: State = {
     input: "",
     spinning: false,
 
-    editingIndex: null,
+    editingSegmentId: null,
     editingValue: "",
 
     keyboardHeight: 0,
@@ -89,12 +90,20 @@ const initialState: State = {
 /* -------------------------
    HOOK
 --------------------------*/
-export default function useSpinWheel() {
+type SpinWheelOptions = {
+    onSpinComplete?: (label: string) => void;
+};
+
+export default function useSpinWheel(options: SpinWheelOptions = {}) {
+    const onSpinCompleteRef = useRef(options.onSpinComplete);
+    onSpinCompleteRef.current = options.onSpinComplete;
+
     const [state, dispatch] = useReducer(reducer, initialState);
     const segments = useWheelStore((s) => s.segments);
     const activePresetId = useWheelStore((s) => s.activePresetId);
     const result = useWheelStore((s) => s.result);
     const setSegments = useWheelStore((s) => s.setSegments);
+    const reorderSegments = useWheelStore((s) => s.reorderSegments);
     const setResult = useWheelStore((s) => s.setResult);
     const [mutedSegmentIds, setMutedSegmentIds] = useState<string[]>([]);
     const activeSegments = useMemo(
@@ -157,12 +166,12 @@ export default function useSpinWheel() {
         );
     }, [segments]);
 
-    // If the displayed result is no longer active, clear it.
+    // Clear result only when the winning label was removed from the wheel (not when muted).
     useEffect(() => {
         if (!result) return;
-        if (activeSegments.some((segment) => segment.label === result)) return;
+        if (segments.some((segment) => segment.label === result)) return;
         setResult(null);
-    }, [activeSegments, result, setResult]);
+    }, [segments, result, setResult]);
 
     /* -------------------------
        MENU ANIMATION
@@ -202,7 +211,20 @@ export default function useSpinWheel() {
             angleRanges: angleRangesAtStart,
         });
 
-        setResult(segmentsAtStart[index].label);
+        const winner = segmentsAtStart[index];
+        const label = winner.label;
+        setResult(label);
+        onSpinCompleteRef.current?.(label);
+
+        if (
+            useAppSettingsStore.getState().eliminationModeEnabled &&
+            segmentsAtStart.length > 1
+        ) {
+            setMutedSegmentIds((prev) =>
+                prev.includes(winner.id) ? prev : [...prev, winner.id]
+            );
+        }
+
         dispatch({ type: "SET_SPINNING", payload: false });
     };
 
@@ -244,7 +266,7 @@ export default function useSpinWheel() {
                     toValue: legTo,
                     duration: legDurationMs,
                     easing: Easing.linear,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                 });
 
                 holdAnimRef.current = leg;
@@ -279,7 +301,7 @@ export default function useSpinWheel() {
                             toValue: totalRotation,
                             duration: transitionDurationMs,
                             easing: Easing.bezier(0.08, 0.08, 0.25, 1),
-                            useNativeDriver: true,
+                            useNativeDriver: false,
                         }).start(({ finished: decelFinished }) => {
                             if (!decelFinished) return;
                             finalizeSpin(totalRotation, segmentsAtStart, angleRangesAtStart);
@@ -325,7 +347,7 @@ export default function useSpinWheel() {
                 toValue: totalRotation,
                 duration: 4000,
                 easing: Easing.bezier(0.33, 1, 0.68, 1),
-                useNativeDriver: true,
+                useNativeDriver: false,
             }).start(({ finished }) => {
                 if (!finished) return;
                 finalizeSpin(totalRotation, segmentsAtStart, angleRangesAtStart);
@@ -367,10 +389,10 @@ export default function useSpinWheel() {
         dispatch({ type: "SET_INPUT", payload: "" });
     },
 
-    removeSegment: (i: number) => {
+    removeSegment: (id: string) => {
         if (segments.length <= 1) return;
 
-        setSegments(segments.filter((_, index) => index !== i));
+        setSegments(segments.filter((segment) => segment.id !== id));
     },
     updateSegmentWeight: (id: string, deltaShares: number) => {
         setSegments(
@@ -389,20 +411,21 @@ export default function useSpinWheel() {
     clearMutedSegments: () => setMutedSegmentIds([]),
 
     saveEdit: () => {
-        if (state.editingIndex === null) return;
+        if (!state.editingSegmentId) return;
 
-        const updated = [...segments];
+        setSegments(
+            segments.map((segment) =>
+                segment.id === state.editingSegmentId
+                    ? {
+                          ...segment,
+                          label:
+                              state.editingValue.trim() || segment.label,
+                      }
+                    : segment
+            )
+        );
 
-        updated[state.editingIndex] = {
-            ...updated[state.editingIndex],
-            label:
-                state.editingValue.trim() ||
-                updated[state.editingIndex].label,
-        };
-
-        setSegments(updated);
-
-        dispatch({ type: "SET_EDIT_INDEX", payload: null });
+        dispatch({ type: "SET_EDIT_SEGMENT_ID", payload: null });
         dispatch({ type: "SET_EDIT_VALUE", payload: "" });
     },
 
@@ -417,12 +440,14 @@ export default function useSpinWheel() {
         setSegments([...segments].sort(() => Math.random() - 0.5));
     },
 
+    reorderSegments,
+
     // UI state actions
     setMenuVisible: (v: boolean) =>
         dispatch({ type: "SET_MENU_VISIBLE", payload: v }),
 
-    setEditingIndex: (v: number | null) =>
-        dispatch({ type: "SET_EDIT_INDEX", payload: v }),
+    setEditingSegmentId: (v: string | null) =>
+        dispatch({ type: "SET_EDIT_SEGMENT_ID", payload: v }),
 
     setEditingValue: (v: string) =>
         dispatch({ type: "SET_EDIT_VALUE", payload: v }),

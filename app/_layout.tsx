@@ -14,6 +14,7 @@ export default function Layout() {
                 <Stack.Screen name="spinWheel" />
                 <Stack.Screen name="presets" />
                 <Stack.Screen name="about" />
+                <Stack.Screen name="settings" />
             </Stack>
         </GestureHandlerRootView>
     );

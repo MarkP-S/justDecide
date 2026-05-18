@@ -17,7 +17,9 @@ type Props = {
     onClose: () => void;
     onCreateNewWheel: () => void;
     onOpenPresets: () => void;
+    onOpenRecentSpins: () => void;
     onSavePreset: () => void;
+    onOpenSettings: () => void;
     onOpenAbout: () => void;
     onDeleteWheel: () => void;
     deleteWheelDisabled?: boolean;
@@ -30,7 +32,9 @@ export default function WheelMenu({
     onClose,
     onCreateNewWheel,
     onOpenPresets,
+    onOpenRecentSpins,
     onSavePreset,
+    onOpenSettings,
     onOpenAbout,
     onDeleteWheel,
     deleteWheelDisabled = false,
@@ -95,9 +99,19 @@ export default function WheelMenu({
                         <Text style={styles.menuItemText}>Edit Wheels</Text>
                     </TouchableOpacity>
 
+                    <TouchableOpacity style={styles.menuItem} onPress={onOpenRecentSpins}>
+                        <Text style={styles.menuItemText}>Recent Spins</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuItem} onPress={onOpenSettings}>
+                        <Text style={styles.menuItemText}>Settings</Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.menuItem} onPress={onOpenAbout}>
                         <Text style={styles.menuItemText}>About</Text>
                     </TouchableOpacity>
+
+                    <View style={styles.menuSeparator} />
 
                     <TouchableOpacity style={styles.menuItem} onPress={onSavePreset}>
                         <Text style={[styles.menuItemText, styles.menuItemAccentGreen]}>
@@ -130,6 +144,11 @@ export default function WheelMenu({
 const styles = StyleSheet.create({
     menuItem: {
         paddingVertical: 12,
+    },
+    menuSeparator: {
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: "#444",
+        marginVertical: 6,
     },
     menuItemText: {
         color: "white",
