@@ -16,7 +16,7 @@ export const ABOUT_CONFIG = {
      * Public URL to your privacy policy (GitHub Pages, Notion, etc.).
      * Required for App Store / Play Store listings.
      */
-    privacyPolicyUrl: "[YOUR PRIVACY POLICY URL]",
+    privacyPolicyUrl: "https://markp-s.github.io/justDecide/PRIVACY_POLICY",
 
     /**
      * Optional terms of use URL. Leave as empty string to hide the menu row.
