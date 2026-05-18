@@ -225,8 +225,15 @@ export default function SpinWheelScreen() {
                         params: { createNew: "1" },
                     });
                 }}
-                onOpenPresets={() => router.push("/presets")}
+                onOpenPresets={() => {
+                    setMenuVisible(false);
+                    router.push("/presets");
+                }}
                 onSavePreset={openSaveAsModal}
+                onOpenAbout={() => {
+                    setMenuVisible(false);
+                    router.push("/about");
+                }}
                 onDeleteWheel={confirmDeleteWheel}
                 deleteWheelDisabled={!activePresetId}
             />

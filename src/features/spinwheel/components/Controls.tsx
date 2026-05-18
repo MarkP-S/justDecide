@@ -54,7 +54,7 @@ type Props = {
     isSegmentMuted: (id: string) => boolean;
     toggleMutedSegment: (id: string) => void;
     restoreMutedSegments: () => void;
-    updateSegmentWeight: (id: string, deltaPercent: number) => void;
+    updateSegmentWeight: (id: string, deltaShares: number) => void;
 };
 
 export default function Controls({
@@ -517,7 +517,7 @@ export default function Controls({
                                     >
                                         <View style={styles.weightControls}>
                                             <Pressable
-                                                onPress={() => updateSegmentWeight(item.id, -5)}
+                                                onPress={() => updateSegmentWeight(item.id, -1)}
                                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                                 style={({ pressed }) => [
                                                     styles.weightBtn,
@@ -528,7 +528,7 @@ export default function Controls({
                                             </Pressable>
                                             <Text style={styles.weightText}>{getSegmentPercent(item)}%</Text>
                                             <Pressable
-                                                onPress={() => updateSegmentWeight(item.id, 5)}
+                                                onPress={() => updateSegmentWeight(item.id, 1)}
                                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                                 style={({ pressed }) => [
                                                     styles.weightBtn,

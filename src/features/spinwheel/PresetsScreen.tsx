@@ -23,6 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { createId } from "@/src/utils/createId";
 import { Segment, WheelPreset } from "../spinwheel/types";
 import useWheelPresets from "./hooks/useWheelPresets";
+import { adjustSegmentWeight, getSegmentPercent } from "./utils/segmentWeight";
 
 export default function PresetsScreen() {
     const { presets, updatePreset, deletePreset, addPreset } = useWheelPresets();
@@ -54,30 +55,8 @@ export default function PresetsScreen() {
         sheetKeyboardHeight > 0
             ? Math.min(sheetKeyboardHeight + 52, maxBottomOffset)
             : baseBottomOffset;
-    const getSegmentsTotalWeight = (segmentList: Segment[]) =>
-        segmentList.reduce((sum, segment) => sum + Math.max(1, segment.weight ?? 1), 0);
-    const getSegmentPercent = (segment: Segment, segmentList: Segment[]) => {
-        const total = getSegmentsTotalWeight(segmentList);
-        if (total <= 0) return 0;
-        return Math.round((Math.max(1, segment.weight ?? 1) / total) * 100);
-    };
-    const adjustLocalSegmentWeight = (id: string, deltaPercent: number) => {
-        setNewSegments((prev) => {
-            const target = prev.find((segment) => segment.id === id);
-            if (!target) return prev;
-            const currentWeight = Math.max(1, target.weight ?? 1);
-            const othersWeight = prev.reduce(
-                (sum, segment) => segment.id === id ? sum : sum + Math.max(1, segment.weight ?? 1),
-                0
-            );
-            if (othersWeight <= 0) return prev;
-            const currentPercent = (currentWeight / (currentWeight + othersWeight)) * 100;
-            const targetPercent = Math.max(5, Math.min(95, currentPercent + deltaPercent));
-            const computedWeight = Math.max(1, Math.round((targetPercent / (100 - targetPercent)) * othersWeight));
-            return prev.map((segment) =>
-                segment.id === id ? { ...segment, weight: computedWeight } : segment
-            );
-        });
+    const adjustLocalSegmentWeight = (id: string, deltaShares: number) => {
+        setNewSegments((prev) => adjustSegmentWeight(prev, id, deltaShares));
     };
 
     useEffect(() => {
@@ -476,7 +455,7 @@ export default function PresetsScreen() {
                                                     {editingItemIndex === null && (
                                                         <View style={styles.editChipWeightControls}>
                                                             <Pressable
-                                                                onPress={() => adjustLocalSegmentWeight(item.id, -5)}
+                                                                onPress={() => adjustLocalSegmentWeight(item.id, -1)}
                                                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                                                 style={({ pressed }) => [
                                                                     styles.editChipWeightBtn,
@@ -486,7 +465,7 @@ export default function PresetsScreen() {
                                                                 <MaterialCommunityIcons name="minus" size={16} color="#b6bcda" />
                                                             </Pressable>
                                                             <Pressable
-                                                                onPress={() => adjustLocalSegmentWeight(item.id, 5)}
+                                                                onPress={() => adjustLocalSegmentWeight(item.id, 1)}
                                                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                                                 style={({ pressed }) => [
                                                                     styles.editChipWeightBtn,

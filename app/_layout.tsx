@@ -11,6 +11,9 @@ export default function Layout() {
                         animation: "fade",
                     }}
                 />
+                <Stack.Screen name="spinWheel" />
+                <Stack.Screen name="presets" />
+                <Stack.Screen name="about" />
             </Stack>
         </GestureHandlerRootView>
     );

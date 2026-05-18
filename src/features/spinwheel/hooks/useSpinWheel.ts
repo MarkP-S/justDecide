@@ -8,6 +8,7 @@ import {
     getWinningIndex,
     normalizeResultIndex,
 } from "../utils/spinLogic";
+import { adjustSegmentWeight } from "../utils/segmentWeight";
 
 
 /* -------------------------
@@ -371,27 +372,9 @@ export default function useSpinWheel() {
 
         setSegments(segments.filter((_, index) => index !== i));
     },
-    updateSegmentWeight: (id: string, deltaPercent: number) => {
-        const target = segments.find((segment) => segment.id === id);
-        if (!target) return;
-        const currentWeight = Math.max(1, target.weight ?? 1);
-        const othersWeight = segments.reduce(
-            (sum, segment) => segment.id === id ? sum : sum + Math.max(1, segment.weight ?? 1),
-            0
-        );
-        if (othersWeight <= 0) return;
-        const currentPercent = (currentWeight / (currentWeight + othersWeight)) * 100;
-        const targetPercent = Math.max(5, Math.min(95, currentPercent + deltaPercent));
-        const computedWeight = Math.max(1, Math.round((targetPercent / (100 - targetPercent)) * othersWeight));
+    updateSegmentWeight: (id: string, deltaShares: number) => {
         setSegments(
-            segments.map((segment) =>
-                segment.id === id
-                    ? {
-                        ...segment,
-                        weight: computedWeight,
-                    }
-                    : segment
-            )
+            adjustSegmentWeight(useWheelStore.getState().segments, id, deltaShares)
         );
     },
 
